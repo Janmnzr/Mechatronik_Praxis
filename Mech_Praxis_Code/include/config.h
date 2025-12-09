@@ -41,15 +41,15 @@
 #define NUM_SENSORS  8
 
 // ===== Linien-Erkennung =====
-#define LINE_THRESHOLD   700   // Schwellwert für schwarze Linie (0-1000, nach Kalibrierung)
+#define LINE_THRESHOLD   500   // Schwellwert für schwarze Linie (0-1000, nach Kalibrierung)
 #define SENSOR_SAMPLES   4     // Anzahl Messungen pro Sensor für Mittelwertbildung
 
 // ===== Kreuzungs-Erkennung =====
-#define GREEN_MIN        110   // Minimaler Wert für grünes Quadrat
-#define GREEN_MAX        450   // Maximaler Wert für grünes Quadrat
-#define CROSSING_THRESHOLD 6   // Mindestanzahl aktiver Sensoren für Kreuzung
+#define GREEN_MIN        90   // Minimaler Wert für grünes Quadrat
+#define GREEN_MAX        300   // Maximaler Wert für grünes Quadrat
+#define CROSSING_THRESHOLD 3   // Mindestanzahl aktiver Sensoren für Kreuzung
 #define CROSSING_DELAY   500   // Verzögerung nach Kreuzungserkennung (ms)
-#define GREEN_CHECK_DELAY 200  // Zeit zum Prüfen des grünen Quadrats (ms)
+#define GREEN_CHECK_DELAY 300  // Zeit zum Prüfen des grünen Quadrats (ms)
 
 // ===== Motor-Parameter =====
 #define STEPS_PER_REV    200   // Standard NEMA 17: 200 Steps/Revolution (1.8° pro Schritt)
@@ -60,9 +60,14 @@
 #define ACCELERATION     1000  // Steps/Sekunde²
 
 // ===== PID-Parameter (Standardwerte - zum Tunen) =====
-#define KP  0.15    // Proportional - erhöhen für schnellere Reaktion
-#define KI  0.0     // Integral - erhöhen bei dauerhafter Abweichung
-#define KD  1.5     // Derivative - erhöhen gegen Oszillation
+#define KP  0.6    // Proportional - erhöhen für schnellere Reaktion
+#define KI  0.1     // Integral - erhöhen bei dauerhafter Abweichung
+#define KD  1.12    // Derivative - erhöhen gegen Oszillation
+//#define KP_NORM_START 0.6
+//#define KI_NORM_START 0.0
+//#define KD_NORM_START 0.12
+//#define MAX_CORRECTION 400
+//#define K_SPEED_COMP 0.03
 
 // ===== Debuging =====
 #define DEBUG_SERIAL     true  // Serial-Debug-Ausgaben

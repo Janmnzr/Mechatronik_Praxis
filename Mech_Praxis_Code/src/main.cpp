@@ -75,6 +75,168 @@ void loop() {
     }
 }
 
+/*void followLine() {
+    // Prüfen ob genug Zeit seit letzter Kreuzung vergangen ist
+    unsigned long currentTime = millis();
+    bool canDetectCrossing = (currentTime - lastCrossingTime) > CROSSING_DELAY;
+    
+    // Kreuzungserkennung
+    if (canDetectCrossing && isCrossing()) {
+        Serial.println("\n!!! KREUZUNG ERKANNT !!!");
+        printCrossingDebug();
+        
+        crossingDetected = true;
+        lastCrossingTime = currentTime;
+        
+        // Kurz warten und dann grünes Quadrat prüfen
+        delay(GREEN_CHECK_DELAY);
+        
+        // Grünes Quadrat links?
+        if (hasGreenMarkerLeft()) {
+            Serial.println(">>> GRÜN LINKS - ABBIEGEN <<<");
+            turnLeft();
+            
+            // PID zurücksetzen
+            lastError = 0;
+            integral = 0;
+            lastTime = millis();
+            return;
+        }
+        // Grünes Quadrat rechts?
+        else if (hasGreenMarkerRight()) {
+            Serial.println(">>> GRÜN RECHTS - ABBIEGEN <<<");
+            turnRight();
+            
+            // PID zurücksetzen
+            lastError = 0;
+            integral = 0;
+            lastTime = millis();
+            return;
+        }
+        // Keine grüne Markierung → Geradeaus
+        else {
+            Serial.println(">>> KEINE GRÜNE MARKIERUNG - GERADEAUS <<<");
+            driveForward(300);  // Kurz vorfahren um Kreuzung zu verlassen
+            
+            // PID zurücksetzen
+            lastError = 0;
+            integral = 0;
+            lastTime = millis();
+            return;
+        }
+    }
+    
+    // ---------- Normierte PID-Regelung (ersetzt alte Berechnung) ----------
+    // Sensorposition 0..7000 (für 8 Sensoren) -> Mitte ~3500
+    int position = readLinePosition();
+    
+    // Prüfen ob Linie erkannt wird
+    if (!isLineDetected()) {
+        Serial.println("WARNUNG: Keine Linie erkannt!");
+        stopMotors();
+        delay(100);
+        return;
+    }
+    
+    // Normieren des Fehlers auf ungefähr -1..+1
+    const float CENTER = 3500.0f;
+    float normError = (position - CENTER) / CENTER; // -1 .. +1 ungefähr
+    
+    // PID-Parameter (lokal, sicherer Startwert)
+    const float KPn = 0.6f;     // P für normierten Fehler
+    const float KIn = 0.0f;     // I (erst später hochsetzen)
+    const float KDn = 0.12f;    // D (klein, geglättet)
+    const float maxCorr = 400.0f; // maximale Korrektur in steps/s
+    
+    // D-Glättung (Low-pass für Rauschreduktion)
+    const float D_ALPHA = 0.2f; // 0..1, kleiner = stärker glätten
+    
+    // Zeitberechnung
+    unsigned long now = millis();
+    float deltaTime = (now - lastTime) / 1000.0f; // in Sekunden
+    if (deltaTime < 0.005f) deltaTime = 0.005f;   // Mindest-dt für Stabilität
+    lastTime = now;
+    
+    // P-Term (auf normierten Fehler)
+    float Pterm = KPn * normError;
+    
+    // I-Term (auf normierten Fehler, Anti-Windup)
+    integral += normError * deltaTime;
+    integral = constrain(integral, -10.0f, 10.0f);
+    float Iterm = KIn * integral;
+    
+    // D-Term (mit Glättung)
+    static float lastErrorSmoothed = 0.0f;
+    float errorSmoothed = (D_ALPHA * normError) + ((1.0f - D_ALPHA) * lastErrorSmoothed);
+    float Dterm = KDn * ((errorSmoothed - lastErrorSmoothed) / deltaTime);
+    lastErrorSmoothed = errorSmoothed;
+    
+    // Gesamtkorrektur (auf steps/s Skalieren) und begrenzen
+    float correction = (Pterm + Iterm + Dterm) * maxCorr;
+    correction = constrain(correction, -maxCorr, maxCorr);
+    
+    // Basisgeschwindigkeit + Korrektur
+    float leftSpeed  = BASE_SPEED + correction;
+    float rightSpeed = BASE_SPEED - correction;
+    
+    // ----- Optionale Ist-Geschwindigkeits-Kompensation (reduziert langsame Drift)
+    // Diese Sektion misst kurz die Ist-Geschwindigkeit und korrigiert geringfügig.
+    // Update-Intervall ~50ms
+    static long lastLpos = 0, lastRpos = 0;
+    static unsigned long lastSpeedCalc = 0;
+    unsigned long tNow = millis();
+    if (tNow - lastSpeedCalc >= 50) {
+        float dt_sec = (tNow - lastSpeedCalc) / 1000.0f;
+        if (dt_sec <= 0) dt_sec = 0.05f;
+        long curL = motorLeft.currentPosition();
+        long curR = motorRight.currentPosition();
+        float actualL = (curL - lastLpos) / dt_sec; // steps/s
+        float actualR = (curR - lastRpos) / dt_sec; // steps/s
+        
+        // einfacher Korrekturterm auf Geschwindigkeitsdifferenz
+        float speedError = actualR - actualL; // >0 => R schneller
+        const float Kspeed = 0.03f; // sehr kleines Start-Gewicht
+        leftSpeed  += Kspeed * (-speedError);
+        rightSpeed -= Kspeed * (-speedError);
+        
+        lastLpos = curL;
+        lastRpos = curR;
+        lastSpeedCalc = tNow;
+    }
+    
+    // Sicheres Begrenzen (erlaubt auch Rückwärts, falls nötig)
+    leftSpeed  = constrain(leftSpeed,  -MAX_SPEED, MAX_SPEED);
+    rightSpeed = constrain(rightSpeed, -MAX_SPEED, MAX_SPEED);
+    
+    // Anwenden der Geschwindigkeiten
+    setMotorSpeeds(leftSpeed, rightSpeed);
+    runMotors();
+    
+    // ===== Debug-Ausgabe (wie vorher) =====
+    #if DEBUG_SERIAL
+    static unsigned long lastPrint = 0;
+    if (millis() - lastPrint > DEBUG_INTERVAL) {
+        Serial.print("Pos: ");
+        Serial.print(position);
+        Serial.print(" | Err: ");
+        Serial.print(normError, 3);
+        Serial.print(" | Corr: ");
+        Serial.print(correction, 1);
+        Serial.print(" | L: ");
+        Serial.print(leftSpeed, 0);
+        Serial.print(" | R: ");
+        Serial.print(rightSpeed, 0);
+        
+        if (isCrossing()) {
+            Serial.print(" | [KREUZUNG]");
+        }
+        
+        Serial.println();
+        lastPrint = millis();
+    }
+    #endif
+}*/
+
 void followLine() {
     // Prüfen ob genug Zeit seit letzter Kreuzung vergangen ist
     unsigned long currentTime = millis();

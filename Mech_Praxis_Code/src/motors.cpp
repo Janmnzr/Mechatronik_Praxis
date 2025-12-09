@@ -258,7 +258,7 @@ void driveStraight(int distance_mm) {
     // Raddurchmesser z.B. 65mm → Umfang = 204mm
     // Steps pro mm = 1600 / 204 ≈ 7.8 steps/mm
     
-    float stepsPerMM = (STEPS_PER_REV * MICROSTEPS) / 204.0;  // Anpassen!
+    float stepsPerMM = (STEPS_PER_REV * MICROSTEPS) / 220.0;  // Anpassen!
     long targetSteps = distance_mm * stepsPerMM;
     
     // Position zurücksetzen
