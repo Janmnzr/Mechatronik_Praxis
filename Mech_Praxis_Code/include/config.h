@@ -14,14 +14,14 @@
 #define ENABLE_PIN   22
 
 // ===== Microstepping Pins Motor 1 (Rechts) =====
-#define MS1_PIN_1    10
-#define MS2_PIN_1    9
-#define MS3_PIN_1    8
+#define MS1_PIN_1    13
+#define MS2_PIN_1    12
+#define MS3_PIN_1    11
 
 // ===== Microstepping Pins Motor 2 (Links) =====
-#define MS1_PIN_2    13
-#define MS2_PIN_2    12
-#define MS3_PIN_2    11
+#define MS1_PIN_2    10
+#define MS2_PIN_2    9
+#define MS3_PIN_2    8
 
 // ===== QTR-MD-08A Sensor Pins (ANALOG) =====
 // Der QTR-MD-08A wird im Analog-Modus betrieben
@@ -41,15 +41,15 @@
 #define NUM_SENSORS  8
 
 // ===== Linien-Erkennung =====
-#define LINE_THRESHOLD   500   // Schwellwert für schwarze Linie (0-1000, nach Kalibrierung)
+#define LINE_THRESHOLD   700   // Schwellwert für schwarze Linie (0-1000, nach Kalibrierung)
 #define SENSOR_SAMPLES   4     // Anzahl Messungen pro Sensor für Mittelwertbildung
 
 // ===== Kreuzungs-Erkennung =====
-#define GREEN_MIN        150   // Minimaler Wert für grünes Quadrat
-#define GREEN_MAX        350   // Maximaler Wert für grünes Quadrat
+#define GREEN_MIN        110   // Minimaler Wert für grünes Quadrat
+#define GREEN_MAX        450   // Maximaler Wert für grünes Quadrat
 #define CROSSING_THRESHOLD 6   // Mindestanzahl aktiver Sensoren für Kreuzung
 #define CROSSING_DELAY   500   // Verzögerung nach Kreuzungserkennung (ms)
-#define GREEN_CHECK_DELAY 100  // Zeit zum Prüfen des grünen Quadrats (ms)
+#define GREEN_CHECK_DELAY 200  // Zeit zum Prüfen des grünen Quadrats (ms)
 
 // ===== Motor-Parameter =====
 #define STEPS_PER_REV    200   // Standard NEMA 17: 200 Steps/Revolution (1.8° pro Schritt)
