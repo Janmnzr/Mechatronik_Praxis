@@ -216,7 +216,7 @@ void turnLeft() {
     setMotorSpeeds(-TURN_SPEED, TURN_SPEED);
     
     // Dauer für ca. 90° (muss kalibriert werden!)
-    while (millis() - startTime < 1500) {  // 800ms für 90° - anpassen!
+    while (millis() - startTime < 1200) {  // 800ms für 90° - anpassen!
         runMotors();
     }
     
@@ -239,7 +239,7 @@ void turnRight() {
     setMotorSpeeds(TURN_SPEED, -TURN_SPEED);
     
     // Dauer für ca. 90° (muss kalibriert werden!)
-    while (millis() - startTime < 1500) {  // 800ms für 90° - anpassen!
+    while (millis() - startTime < 1200) {  // 800ms für 90° - anpassen!
         runMotors();
     }
     

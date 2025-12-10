@@ -18,7 +18,9 @@ bool isLineDetected();
 bool isCrossing();
 bool hasGreenMarkerLeft();
 bool hasGreenMarkerRight();
+bool hasGreenMarker();  // Neu: Erkennt Grün auf beiden Seiten
 int getActiveSensorCount();
+int getGreenSensorCount(bool left);  // Neu: Zählt grüne Sensoren
 void printCrossingDebug();
 
 #endif

@@ -21,6 +21,9 @@ Mode currentMode = STOPPED;
 // ===== Kreuzungs-Verwaltung =====
 unsigned long lastCrossingTime = 0;
 bool crossingDetected = false;
+bool greenDetected = false;
+int turnDirection = 0;  // 0 = gerade, -1 = links, 1 = rechts
+unsigned long greenDetectionTime = 0;
 
 // ===== Funktions-Deklarationen =====
 void followLine();
@@ -42,6 +45,8 @@ void setup() {
     
     Serial.println("\nInitialisierung abgeschlossen!");
     Serial.println("\n--- BEDIENUNG ---");
+    Serial.println("Wichtig: Vor dem Starten Schrittmodus wählen und danach prüfen!");
+    Serial.println("MS1, MS2, MS3 Pins für beide Motoren auf HIGH/LOW setzen");
     printHelp();
     
     currentMode = STOPPED;
@@ -75,220 +80,73 @@ void loop() {
     }
 }
 
-/*void followLine() {
-    // Prüfen ob genug Zeit seit letzter Kreuzung vergangen ist
+void followLine() {
     unsigned long currentTime = millis();
+    
+    // ===== SCHRITT 1: Grünes Quadrat erkennen (VOR der Kreuzung) =====
+    if (!greenDetected && hasGreenMarker()) {
+        greenDetected = true;
+        greenDetectionTime = currentTime;
+        
+        // Richtung merken
+        if (hasGreenMarkerLeft()) {
+            turnDirection = -1;  // Links
+            Serial.println("\n!!! GRÜN LINKS ERKANNT - Bereit zum Abbiegen !!!");
+        } else if (hasGreenMarkerRight()) {
+            turnDirection = 1;   // Rechts
+            Serial.println("\n!!! GRÜN RECHTS ERKANNT - Bereit zum Abbiegen !!!");
+        }
+    }
+    
+    // ===== SCHRITT 2: Kreuzung erkennen (kommt NACH Grün) =====
     bool canDetectCrossing = (currentTime - lastCrossingTime) > CROSSING_DELAY;
     
-    // Kreuzungserkennung
     if (canDetectCrossing && isCrossing()) {
         Serial.println("\n!!! KREUZUNG ERKANNT !!!");
         printCrossingDebug();
         
-        crossingDetected = true;
         lastCrossingTime = currentTime;
         
-        // Kurz warten und dann grünes Quadrat prüfen
-        delay(GREEN_CHECK_DELAY);
+        // Entscheidung basierend auf vorher erkanntem Grün
+        if (greenDetected && turnDirection != 0) {
+            // Grün wurde VOR der Kreuzung erkannt
+            if (turnDirection == -1) {
+                Serial.println(">>> ABBIEGEN LINKS (Grün wurde erkannt) <<<");
+                turnLeft();
+            } else if (turnDirection == 1) {
+                Serial.println(">>> ABBIEGEN RECHTS (Grün wurde erkannt) <<<");
+                turnRight();
+            }
+            
+            // Zurücksetzen
+            greenDetected = false;
+            turnDirection = 0;
+            
+        } else {
+            // Keine grüne Markierung → Geradeaus
+            Serial.println(">>> KEIN GRÜN - GERADEAUS <<<");
+            driveForward(FORWARD_BEFORE_TURN);
+            
+            // Zurücksetzen
+            greenDetected = false;
+            turnDirection = 0;
+        }
         
-        // Grünes Quadrat links?
-        if (hasGreenMarkerLeft()) {
-            Serial.println(">>> GRÜN LINKS - ABBIEGEN <<<");
-            turnLeft();
-            
-            // PID zurücksetzen
-            lastError = 0;
-            integral = 0;
-            lastTime = millis();
-            return;
-        }
-        // Grünes Quadrat rechts?
-        else if (hasGreenMarkerRight()) {
-            Serial.println(">>> GRÜN RECHTS - ABBIEGEN <<<");
-            turnRight();
-            
-            // PID zurücksetzen
-            lastError = 0;
-            integral = 0;
-            lastTime = millis();
-            return;
-        }
-        // Keine grüne Markierung → Geradeaus
-        else {
-            Serial.println(">>> KEINE GRÜNE MARKIERUNG - GERADEAUS <<<");
-            driveForward(300);  // Kurz vorfahren um Kreuzung zu verlassen
-            
-            // PID zurücksetzen
-            lastError = 0;
-            integral = 0;
-            lastTime = millis();
-            return;
-        }
-    }
-    
-    // ---------- Normierte PID-Regelung (ersetzt alte Berechnung) ----------
-    // Sensorposition 0..7000 (für 8 Sensoren) -> Mitte ~3500
-    int position = readLinePosition();
-    
-    // Prüfen ob Linie erkannt wird
-    if (!isLineDetected()) {
-        Serial.println("WARNUNG: Keine Linie erkannt!");
-        stopMotors();
-        delay(100);
+        // PID zurücksetzen
+        lastError = 0;
+        integral = 0;
+        lastTime = millis();
         return;
     }
     
-    // Normieren des Fehlers auf ungefähr -1..+1
-    const float CENTER = 3500.0f;
-    float normError = (position - CENTER) / CENTER; // -1 .. +1 ungefähr
-    
-    // PID-Parameter (lokal, sicherer Startwert)
-    const float KPn = 0.6f;     // P für normierten Fehler
-    const float KIn = 0.0f;     // I (erst später hochsetzen)
-    const float KDn = 0.12f;    // D (klein, geglättet)
-    const float maxCorr = 400.0f; // maximale Korrektur in steps/s
-    
-    // D-Glättung (Low-pass für Rauschreduktion)
-    const float D_ALPHA = 0.2f; // 0..1, kleiner = stärker glätten
-    
-    // Zeitberechnung
-    unsigned long now = millis();
-    float deltaTime = (now - lastTime) / 1000.0f; // in Sekunden
-    if (deltaTime < 0.005f) deltaTime = 0.005f;   // Mindest-dt für Stabilität
-    lastTime = now;
-    
-    // P-Term (auf normierten Fehler)
-    float Pterm = KPn * normError;
-    
-    // I-Term (auf normierten Fehler, Anti-Windup)
-    integral += normError * deltaTime;
-    integral = constrain(integral, -10.0f, 10.0f);
-    float Iterm = KIn * integral;
-    
-    // D-Term (mit Glättung)
-    static float lastErrorSmoothed = 0.0f;
-    float errorSmoothed = (D_ALPHA * normError) + ((1.0f - D_ALPHA) * lastErrorSmoothed);
-    float Dterm = KDn * ((errorSmoothed - lastErrorSmoothed) / deltaTime);
-    lastErrorSmoothed = errorSmoothed;
-    
-    // Gesamtkorrektur (auf steps/s Skalieren) und begrenzen
-    float correction = (Pterm + Iterm + Dterm) * maxCorr;
-    correction = constrain(correction, -maxCorr, maxCorr);
-    
-    // Basisgeschwindigkeit + Korrektur
-    float leftSpeed  = BASE_SPEED + correction;
-    float rightSpeed = BASE_SPEED - correction;
-    
-    // ----- Optionale Ist-Geschwindigkeits-Kompensation (reduziert langsame Drift)
-    // Diese Sektion misst kurz die Ist-Geschwindigkeit und korrigiert geringfügig.
-    // Update-Intervall ~50ms
-    static long lastLpos = 0, lastRpos = 0;
-    static unsigned long lastSpeedCalc = 0;
-    unsigned long tNow = millis();
-    if (tNow - lastSpeedCalc >= 50) {
-        float dt_sec = (tNow - lastSpeedCalc) / 1000.0f;
-        if (dt_sec <= 0) dt_sec = 0.05f;
-        long curL = motorLeft.currentPosition();
-        long curR = motorRight.currentPosition();
-        float actualL = (curL - lastLpos) / dt_sec; // steps/s
-        float actualR = (curR - lastRpos) / dt_sec; // steps/s
-        
-        // einfacher Korrekturterm auf Geschwindigkeitsdifferenz
-        float speedError = actualR - actualL; // >0 => R schneller
-        const float Kspeed = 0.03f; // sehr kleines Start-Gewicht
-        leftSpeed  += Kspeed * (-speedError);
-        rightSpeed -= Kspeed * (-speedError);
-        
-        lastLpos = curL;
-        lastRpos = curR;
-        lastSpeedCalc = tNow;
+    // Grün-Erkennung zurücksetzen wenn zu lange her
+    if (greenDetected && (currentTime - greenDetectionTime) > 2000) {
+        Serial.println("Grün-Erkennung abgelaufen (keine Kreuzung gefunden)");
+        greenDetected = false;
+        turnDirection = 0;
     }
     
-    // Sicheres Begrenzen (erlaubt auch Rückwärts, falls nötig)
-    leftSpeed  = constrain(leftSpeed,  -MAX_SPEED, MAX_SPEED);
-    rightSpeed = constrain(rightSpeed, -MAX_SPEED, MAX_SPEED);
-    
-    // Anwenden der Geschwindigkeiten
-    setMotorSpeeds(leftSpeed, rightSpeed);
-    runMotors();
-    
-    // ===== Debug-Ausgabe (wie vorher) =====
-    #if DEBUG_SERIAL
-    static unsigned long lastPrint = 0;
-    if (millis() - lastPrint > DEBUG_INTERVAL) {
-        Serial.print("Pos: ");
-        Serial.print(position);
-        Serial.print(" | Err: ");
-        Serial.print(normError, 3);
-        Serial.print(" | Corr: ");
-        Serial.print(correction, 1);
-        Serial.print(" | L: ");
-        Serial.print(leftSpeed, 0);
-        Serial.print(" | R: ");
-        Serial.print(rightSpeed, 0);
-        
-        if (isCrossing()) {
-            Serial.print(" | [KREUZUNG]");
-        }
-        
-        Serial.println();
-        lastPrint = millis();
-    }
-    #endif
-}*/
-
-void followLine() {
-    // Prüfen ob genug Zeit seit letzter Kreuzung vergangen ist
-    unsigned long currentTime = millis();
-    bool canDetectCrossing = (currentTime - lastCrossingTime) > CROSSING_DELAY;
-    
-    // Kreuzungserkennung
-    if (canDetectCrossing && isCrossing()) {
-        Serial.println("\n!!! KREUZUNG ERKANNT !!!");
-        printCrossingDebug();
-        
-        crossingDetected = true;
-        lastCrossingTime = currentTime;
-        
-        // Kurz warten und dann grünes Quadrat prüfen
-        delay(GREEN_CHECK_DELAY);
-        
-        // Grünes Quadrat links?
-        if (hasGreenMarkerLeft()) {
-            Serial.println(">>> GRÜN LINKS - ABBIEGEN <<<");
-            turnLeft();
-            
-            // PID zurücksetzen
-            lastError = 0;
-            integral = 0;
-            lastTime = millis();
-            return;
-        }
-        // Grünes Quadrat rechts?
-        else if (hasGreenMarkerRight()) {
-            Serial.println(">>> GRÜN RECHTS - ABBIEGEN <<<");
-            turnRight();
-            
-            // PID zurücksetzen
-            lastError = 0;
-            integral = 0;
-            lastTime = millis();
-            return;
-        }
-        // Keine grüne Markierung → Geradeaus
-        else {
-            Serial.println(">>> KEINE GRÜNE MARKIERUNG - GERADEAUS <<<");
-            driveForward(300);  // Kurz vorfahren um Kreuzung zu verlassen
-            
-            // PID zurücksetzen
-            lastError = 0;
-            integral = 0;
-            lastTime = millis();
-            return;
-        }
-    }
-    
-    // Normale Linienfolger-Logik (wie vorher)
+    // ===== SCHRITT 3: Normale Linienfolger-Logik =====
     int position = readLinePosition();
     
     // Prüfen ob Linie erkannt wird
@@ -300,6 +158,7 @@ void followLine() {
     }
     
     // Fehler berechnen (Abweichung von Mitte)
+    // Position: 0 = ganz links, 3500 = mitte, 7000 = ganz rechts
     float error = position - 3500.0;
     
     // Zeit seit letztem Update
@@ -323,6 +182,8 @@ void followLine() {
     lastError = error;
     
     // ===== Geschwindigkeiten berechnen =====
+    // Positive Korrektur = zu weit rechts → linker Motor schneller
+    // Negative Korrektur = zu weit links → rechter Motor schneller
     float leftSpeed = BASE_SPEED + correction;
     float rightSpeed = BASE_SPEED - correction;
     
@@ -347,7 +208,12 @@ void followLine() {
         Serial.print(" | R: ");
         Serial.print(rightSpeed, 0);
         
-        // Kreuzungs-Info
+        // Status-Info
+        if (greenDetected) {
+            Serial.print(" | [GRÜN:");
+            Serial.print(turnDirection == -1 ? "L" : "R");
+            Serial.print("]");
+        }
         if (isCrossing()) {
             Serial.print(" | [KREUZUNG]");
         }
@@ -486,6 +352,38 @@ void processSerialCommands() {
                 driveForward(500);
                 break;
                 
+            case 't':
+            case 'T':
+                Serial.println("\n>>> Analog-Pin Raw-Test <<<");
+                Serial.print("A0: "); Serial.println(analogRead(A0));
+                Serial.print("A1: "); Serial.println(analogRead(A1));
+                Serial.print("A2: "); Serial.println(analogRead(A2));
+                Serial.print("A3: "); Serial.println(analogRead(A3));
+                Serial.print("A4: "); Serial.println(analogRead(A4));
+                Serial.print("A5: "); Serial.println(analogRead(A5));
+                Serial.print("A6: "); Serial.println(analogRead(A6));
+                Serial.print("A7: "); Serial.println(analogRead(A7));
+                Serial.println();
+                break;
+                
+            case 'p':
+            case 'P':
+                Serial.println("\n>>> PID Live-Werte <<<");
+                Serial.println("Position und Korrektur werden angezeigt...");
+                Serial.println("(Fahrzeug über Linie bewegen)");
+                for (int i = 0; i < 10; i++) {
+                    int pos = readLinePosition();
+                    float err = pos - 3500.0;
+                    Serial.print("Pos: ");
+                    Serial.print(pos);
+                    Serial.print(" | Fehler: ");
+                    Serial.print(err);
+                    Serial.print(" | Korrektur: ");
+                    Serial.println(err * KP);
+                    delay(300);
+                }
+                break;
+                
             default:
                 Serial.println("Unbekannter Befehl. Druecke 'h' fuer Hilfe.");
                 break;
@@ -500,6 +398,8 @@ void printHelp() {
     Serial.println("x - Stopp");
     Serial.println("d - Debug-Modus (Sensorwerte)");
     Serial.println("k - Kreuzungs-Test");
+    Serial.println("t - Analog-Pin Raw-Test");
+    Serial.println("p - PID Live-Test");
     Serial.println("m - Motor-Status anzeigen");
     Serial.println("i - Gesamt-Status");
     Serial.println("e - Motoren aktivieren");
