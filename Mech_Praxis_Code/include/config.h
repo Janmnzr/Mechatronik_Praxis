@@ -42,7 +42,7 @@
 
 // ===== Linien-Erkennung =====
 #define LINE_THRESHOLD   700   // Schwellwert für schwarze Linie (0-1000, nach Kalibrierung)
-#define SENSOR_SAMPLES   4     // Anzahl Messungen pro Sensor für Mittelwertbildung
+#define SENSOR_SAMPLES        // Anzahl Messungen pro Sensor für Mittelwertbildung
 
 // ===== Kreuzungs-Erkennung =====
 #define GREEN_MIN        100   // Minimaler Wert für grünes Quadrat

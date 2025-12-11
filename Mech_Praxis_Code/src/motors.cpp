@@ -126,9 +126,13 @@ void stopMotors() {
     motorRight.stop();
 }
 
-void runMotors() {
-    motorLeft.runSpeed();
-    motorRight.runSpeed();
+void motorISR() {
+    // Diese Funktion wird vom Timer 25.000 Mal pro Sekunde aufgerufen
+    // Sie muss so kurz wie möglich sein!
+    if (motorLeft.speed() != 0 || motorRight.speed() != 0) {
+        motorLeft.runSpeed();
+        motorRight.runSpeed();
+    }
 }
 
 void printMotorStatus() {
@@ -196,7 +200,7 @@ void driveForward(unsigned long duration_ms) {
     setMotorSpeeds(BASE_SPEED, BASE_SPEED);
     
     while (millis() - startTime < duration_ms) {
-        runMotors();
+        
     }
     
     stopMotors();
@@ -217,7 +221,7 @@ void turnLeft() {
     
     // Dauer für ca. 90° (muss kalibriert werden!)
     while (millis() - startTime < 1200) {  // 800ms für 90° - anpassen!
-        runMotors();
+        
     }
     
     stopMotors();
@@ -240,7 +244,7 @@ void turnRight() {
     
     // Dauer für ca. 90° (muss kalibriert werden!)
     while (millis() - startTime < 1200) {  // 800ms für 90° - anpassen!
-        runMotors();
+       
     }
     
     stopMotors();

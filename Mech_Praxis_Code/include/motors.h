@@ -22,7 +22,7 @@ void initMotors();
 void setMicrostepping(MicrostepMode mode);
 void setMotorSpeeds(float leftSpeed, float rightSpeed);
 void stopMotors();
-void runMotors();
+void motorISR();
 void enableMotors();
 void disableMotors();
 

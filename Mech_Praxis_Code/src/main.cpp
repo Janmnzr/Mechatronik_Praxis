@@ -3,6 +3,7 @@
 #include "sensors.h"
 #include "motors.h"
 #include "bluetooth.h" // <--- NEU
+#include <TimerOne.h>
 
 // ===== PID-Variablen =====
 float lastError = 0;
@@ -44,6 +45,10 @@ void setup() {
     // Hardware initialisieren
     initSensors();
     initMotors();
+    // Timer für Motor-Ansteuerung konfigurieren
+    // 40 Mikrosekunden = 25 kHz (schnell genug für alle Speeds)
+    Timer1.initialize(40); 
+    Timer1.attachInterrupt(motorISR);
     bt.init(); // <--- NEU: Bluetooth starten
     
     Serial.println("\nInitialisierung abgeschlossen!");
@@ -280,7 +285,7 @@ void executeCommand(char cmd) {
 
 void followLine() {
     unsigned long currentTime = millis();
-    
+    int position = readLinePosition();
     // ===== SCHRITT 1: Grünes Quadrat erkennen (VOR der Kreuzung) =====
     if (!greenDetected && hasGreenMarker()) {
         greenDetected = true;
@@ -345,7 +350,7 @@ void followLine() {
     }
     
     // ===== SCHRITT 3: Normale Linienfolger-Logik =====
-    int position = readLinePosition();
+    
     
     // Prüfen ob Linie erkannt wird
     if (!isLineDetected()) {
@@ -386,7 +391,7 @@ void followLine() {
     rightSpeed = constrain(rightSpeed, TURN_SPEED, MAX_SPEED);
     
     setMotorSpeeds(leftSpeed, rightSpeed);
-    runMotors();
+    
     
     // ===== Debug-Ausgabe (wiederhergestellt) =====
     #if DEBUG_SERIAL
@@ -493,4 +498,11 @@ void printStatus() {
     Serial.println(KD, 3);
     
     Serial.println("\n====================\n");
+}
+void motorISR() {
+    // Diese Funktion wird vom Timer im Hintergrund aufgerufen (25.000 mal pro Sekunde)
+    if (currentMode == RUNNING || currentMode == CALIBRATION) { // Oder wann immer sie laufen sollen
+        motorLeft.runSpeed();
+        motorRight.runSpeed();
+    }
 }
