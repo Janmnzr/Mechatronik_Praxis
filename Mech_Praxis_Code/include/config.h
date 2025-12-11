@@ -62,9 +62,9 @@
 #define ACCELERATION     1000  // Steps/Sekunde²
 
 // ===== PID-Parameter (Standardwerte - zum Tunen) =====
-#define KP  0.3     // Proportional - erhöhen für schnellere Reaktion (war 0.15)
+#define KP  0.15     // Proportional - erhöhen für schnellere Reaktion (war 0.15)
 #define KI  0.0     // Integral - erhöhen bei dauerhafter Abweichung
-#define KD  2.0     // Derivative - erhöhen gegen Oszillation (war 1.5)
+#define KD  2.8     // Derivative - erhöhen gegen Oszillation (war 1.5)
 
 // ===== Debuging =====
 #define DEBUG_SERIAL     true  // Serial-Debug-Ausgaben

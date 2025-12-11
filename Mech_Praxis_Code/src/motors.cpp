@@ -126,14 +126,14 @@ void stopMotors() {
     motorRight.stop();
 }
 
-void motorISR() {
+/*void motorISR() {
     // Diese Funktion wird vom Timer 25.000 Mal pro Sekunde aufgerufen
     // Sie muss so kurz wie möglich sein!
     if (motorLeft.speed() != 0 || motorRight.speed() != 0) {
         motorLeft.runSpeed();
         motorRight.runSpeed();
     }
-}
+}*/
 
 void printMotorStatus() {
     Serial.println("=== Motor Status ===");

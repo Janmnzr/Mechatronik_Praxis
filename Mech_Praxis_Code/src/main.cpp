@@ -377,7 +377,7 @@ void followLine() {
     integral = constrain(integral, -1000, 1000);
     float I = integral;
     
-    float D = (error - lastError) / deltaTime;
+    float D = (error - lastError);
     
     float correction = (KP * P) + (KI * I) + (KD * D);
     
