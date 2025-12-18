@@ -13,8 +13,7 @@ unsigned long lastTime = 0;
 // ===== Deadzone für Stabilität =====
 #define ERROR_DEADZONE 50  // Fehler unter diesem Wert werden ignoriert
 
-// Motoren enable Pin auf HIGH setzen um zu deaktivieren
-digitalWrite(ENABLE_PIN, HIGH);
+
 // ===== Betriebsmodi =====
 enum Mode {
     CALIBRATION,
