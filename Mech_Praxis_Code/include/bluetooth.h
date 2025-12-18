@@ -5,21 +5,33 @@
 
 class BluetoothManager {
 private:
-    HardwareSerial* serialPort; // Zeiger auf die Serial-Schnittstelle (z.B. &Serial1)
+    HardwareSerial* serialPort;
     long baudRate;
 
 public:
-    // Konstruktor: Erwartet die Serial-Schnittstelle (z.B. Serial1)
+    // Konstruktor
     BluetoothManager(HardwareSerial* port, long baud);
 
+    // Basis-Funktionen
     void init();
-    char readCommand();         // Liest ein Zeichen, wenn verfügbar
-    void sendMessage(String msg); // Sendet Text an Handy zurück
-    bool isAvailable();         // Prüft, ob Daten da sind
-    void sendMenu();            // Sendet Menü über Bluetooth
+    char readCommand();
+    void sendMessage(String msg);
+    bool isAvailable();
+    void sendMenu();
+    
+    // ===== NEU: Unified Print-Funktionen =====
+    // Diese Funktionen senden nur an Bluetooth
+    // Verwende printBoth() in main.cpp für beide Kanäle
+    void println(String msg);
+    void print(String msg);
+    void println(int value);
+    void print(int value);
+    void println(float value, int decimals = 2);
+    void print(float value, int decimals = 2);
+    void print(char c);
 };
 
-// Globales Objekt verfügbar machen
+// Globales Objekt
 extern BluetoothManager bt;
 
 #endif

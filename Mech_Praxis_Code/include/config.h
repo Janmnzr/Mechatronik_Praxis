@@ -45,7 +45,7 @@
 #define SENSOR_SAMPLES        // Anzahl Messungen pro Sensor für Mittelwertbildung
 
 // ===== Kreuzungs-Erkennung =====
-#define GREEN_MIN        100   // Minimaler Wert für grünes Quadrat
+#define GREEN_MIN        70   // Minimaler Wert für grünes Quadrat
 #define GREEN_MAX        350   // Maximaler Wert für grünes Quadrat
 #define GREEN_SENSOR_COUNT 2   // Mindestens 2 Sensoren müssen Grün sehen
 #define CROSSING_THRESHOLD 6   // Mindestanzahl aktiver Sensoren für Kreuzung
@@ -57,16 +57,16 @@
 #define STEPS_PER_REV    200   // Standard NEMA 17: 200 Steps/Revolution (1.8° pro Schritt)
 #define MICROSTEPS       8     // Microstepping: 8 = Achtelschritt (1/8)
 #define MAX_SPEED        1600  // Steps/Sekunde (höher bei 1/8 als bei 1/16)
-#define BASE_SPEED       800   // REDUZIERT: Basis-Geschwindigkeit für stabilere Regelung
+#define BASE_SPEED       500   // REDUZIERT: Basis-Geschwindigkeit für stabilere Regelung
 #define TURN_SPEED       400   // Minimale Geschwindigkeit bei Kurven
 #define ACCELERATION     1000  // Steps/Sekunde²
 
 // ===== PID-Parameter (OPTIMIERT gegen Überregeln) =====
 // Problem: Auto überregelt und verliert Linie
 // Lösung: KP stark reduzieren, KD erhöhen, BASE_SPEED senken
-#define KP  0.15     // Proportional - STARK REDUZIERT für sanfte Reaktion
+#define KP  0.5    // Proportional - STARK REDUZIERT für sanfte Reaktion
 #define KI  0.0      // Integral - bleibt 0 (erst aktivieren wenn nötig)
-#define KD  2.5     // Derivative - ERHÖHT gegen Oszillation und Überregeln
+#define KD  2.0    // Derivative - ERHÖHT gegen Oszillation und Überregeln
 
 // TUNING-HINWEISE:
 // - Wenn Auto zu langsam reagiert: KP leicht erhöhen (0.05, 0.06...)

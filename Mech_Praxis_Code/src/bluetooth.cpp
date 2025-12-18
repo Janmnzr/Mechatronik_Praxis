@@ -49,7 +49,6 @@ char BluetoothManager::readCommand() {
 }
 
 void BluetoothManager::sendMessage(String msg) {
-    // An Bluetooth senden
     serialPort->println(msg);
     serialPort->flush();
     delay(5);
@@ -117,4 +116,43 @@ void BluetoothManager::sendMenu() {
     serialPort->println("===============================\n");
     serialPort->flush();
 }
- 
+
+// ===== NEUE PRINT-FUNKTIONEN =====
+
+void BluetoothManager::println(String msg) {
+    serialPort->println(msg);
+    serialPort->flush();
+    delay(2);  // Kurze Verzögerung für Bluetooth
+}
+
+void BluetoothManager::print(String msg) {
+    serialPort->print(msg);
+    serialPort->flush();
+}
+
+void BluetoothManager::println(int value) {
+    serialPort->println(value);
+    serialPort->flush();
+    delay(2);
+}
+
+void BluetoothManager::print(int value) {
+    serialPort->print(value);
+    serialPort->flush();
+}
+
+void BluetoothManager::println(float value, int decimals) {
+    serialPort->println(value, decimals);
+    serialPort->flush();
+    delay(2);
+}
+
+void BluetoothManager::print(float value, int decimals) {
+    serialPort->print(value, decimals);
+    serialPort->flush();
+}
+
+void BluetoothManager::print(char c) {
+    serialPort->print(c);
+    serialPort->flush();
+}
