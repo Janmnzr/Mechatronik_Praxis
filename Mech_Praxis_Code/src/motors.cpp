@@ -15,7 +15,7 @@ void initMotors() {
 
     // Enable-Pin konfigurieren (gemeinsam für beide Motoren)
     pinMode(ENABLE_PIN, OUTPUT);
-    digitalWrite(ENABLE_PIN, HIGH);  // Erstmal disabled
+      // Erstmal disabled
     
     // Microstepping-Pins konfigurieren - Motor 1 (Rechts)
     pinMode(MS1_PIN_1, OUTPUT);

@@ -11,8 +11,10 @@ float integral = 0;
 unsigned long lastTime = 0;
 
 // ===== Deadzone für Stabilität =====
-#define ERROR_DEADZONE 200  // Fehler unter diesem Wert werden ignoriert
+#define ERROR_DEADZONE 50  // Fehler unter diesem Wert werden ignoriert
 
+// Motoren enable Pin auf HIGH setzen um zu deaktivieren
+digitalWrite(ENABLE_PIN, HIGH);
 // ===== Betriebsmodi =====
 enum Mode {
     CALIBRATION,
@@ -51,7 +53,7 @@ void setup() {
     initMotors();
     // Timer für Motor-Ansteuerung konfigurieren
     // 40 Mikrosekunden = 25 kHz (schnell genug für alle Speeds)
-    Timer1.initialize(40); 
+    Timer1.initialize(50); 
     Timer1.attachInterrupt(motorISR);
     bt.init();
     
@@ -462,8 +464,8 @@ void followLine() {
     float rightSpeed = BASE_SPEED - correction;
     
     // Geschwindigkeiten begrenzen
-    leftSpeed = constrain(leftSpeed, TURN_SPEED, MAX_SPEED);
-    rightSpeed = constrain(rightSpeed, TURN_SPEED, MAX_SPEED);
+    leftSpeed = constrain(leftSpeed, 50, MAX_SPEED);
+    rightSpeed = constrain(rightSpeed, 50, MAX_SPEED);
     
     setMotorSpeeds(leftSpeed, rightSpeed);
     
