@@ -66,7 +66,7 @@
 // Lösung: KP stark reduzieren, KD erhöhen, BASE_SPEED senken
 #define KP  0.5    // Proportional - STARK REDUZIERT für sanfte Reaktion
 #define KI  0.0      // Integral - bleibt 0 (erst aktivieren wenn nötig)
-#define KD  2.0    // Derivative - ERHÖHT gegen Oszillation und Überregeln
+#define KD  1.0    // Derivative - ERHÖHT gegen Oszillation und Überregeln
 
 // TUNING-HINWEISE:
 // - Wenn Auto zu langsam reagiert: KP leicht erhöhen (0.05, 0.06...)

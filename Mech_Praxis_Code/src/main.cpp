@@ -71,6 +71,10 @@ void printlnBoth(String message = "");
 void setup() {
     Serial.begin(115200);
     
+    // WICHTIG: Bluetooth zuerst starten, damit printlnBoth funktioniert!
+    bt.init();
+    delay(100); // Kurze Pause zur Sicherheit
+
     // Willkommens-Nachricht
     printlnBoth("\n\n======================================");
     printlnBoth("  LINIENFOLGER - USB & BLUETOOTH");
@@ -80,14 +84,12 @@ void setup() {
     // Hardware initialisieren
     initSensors();
     initMotors();
+    
     // Timer für Motor-Ansteuerung konfigurieren
-    // 40 Mikrosekunden = 25 kHz (schnell genug für alle Speeds)
     Timer1.initialize(50); 
     Timer1.attachInterrupt(motorISR);
-    bt.init();
     
-    // Menü auch über Bluetooth senden
-    delay(500);  // Kurz warten bis Bluetooth bereit ist
+    // Menü senden
     bt.sendMenu();
     
     printlnBoth("\nInitialisierung abgeschlossen!");
@@ -485,16 +487,16 @@ void followLine() {
     float P = error;
     
     // Integral nur aufbauen wenn Fehler dauerhaft vorhanden
-    integral += error * deltaTime;
-    integral = constrain(integral, -1000, 1000);  // Anti-Windup
-    float I = integral;
+    //integral += error * deltaTime;
+    //integral = constrain(integral, -1000, 1000);  // Anti-Windup
+    //float I = integral;
     
     // Derivative: Änderungsrate des Fehlers (dämpft Überregeln)
     float derivative = (error - lastError) / deltaTime;
     float D = derivative;
     
     // PID-Korrektur berechnen
-    float correction = (KP * P) + (KI * I) + (KD * D);
+    float correction = (KP * P) +  (KD * D);//(KI * I) +
     
     // Korrektur begrenzen um extreme Lenkbewegungen zu vermeiden
     correction = constrain(correction, -BASE_SPEED * 0.8, BASE_SPEED * 0.8);
