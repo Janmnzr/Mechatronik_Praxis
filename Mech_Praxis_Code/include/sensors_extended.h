@@ -33,12 +33,9 @@ struct RGBColor {
 void selectMuxChannel(uint8_t channel);
 void disableMuxChannels();
 void initI2CDevices();
-void scanI2CBus();
 
 // ===== ABSTANDSSENSOR (VL53L0X) =====
-void initDistanceSensor();
 uint16_t readDistance();
-void printDistance(uint16_t dist);
 bool isObjectNear(uint16_t threshold);
 bool isObjectVeryClose();
 bool isObjectClose();
@@ -46,13 +43,10 @@ bool isObjectMedium();
 String getDistanceCategory();
 
 // ===== RGB-SENSOR (TCS34725) - LIGHTWEIGHT =====
-void initRGBSensor();
 RGBColor readRGBSensor();
-void printRGBValues(RGBColor color);
 BallColor detectBallColor(RGBColor color);
 String getBallColorName(BallColor color);
 void calibrateBallColor();
-
 
 // Helper-Funktionen für TCS34725 (direkte I²C-Kommunikation)
 void tcs34725_write8(uint8_t reg, uint8_t value);
@@ -62,11 +56,7 @@ uint16_t tcs34725_read16(uint8_t reg);
 // ===== SERVO =====
 void initServo();
 void setServoAngle(int angle);
-void servoLeft();
-void servoCenter();
-void servoRight();
-void servoSweep();
-void printServoPosition();
+void servoMoveTo(int angle, const char* label = nullptr);
 
 // ===== STATUS =====
 void printSensorStatus();
