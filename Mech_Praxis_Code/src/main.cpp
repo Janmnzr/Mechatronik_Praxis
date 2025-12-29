@@ -101,7 +101,7 @@ void loop() {
         case DEBUG:
             {
                 static unsigned long lastDebugPrint = 0;
-                if (millis() - lastDebugPrint > 200) {
+                if (millis() - lastDebugPrint > 1000) {
                     readLinePosition();
                     printSensorValues();
                     
@@ -188,6 +188,7 @@ void executeCommand(char cmd) {
             greenDetected = false;
             turnDirection = 0;
             turnState = NO_TURN;
+            printHelp();
             break;
             
         case 'd':

@@ -56,7 +56,7 @@
 
 // ===== DEBUG =====
 #define DEBUG_SERIAL     true
-#define DEBUG_INTERVAL   100
+#define DEBUG_INTERVAL   1000
 #define DEBUG_GREEN      true
 #define DEBUG_SENSORS    true
 #define DEBUG_SERVO      true
