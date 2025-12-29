@@ -50,9 +50,9 @@
 #define SMOOTH_CURVE_DURATION 800
 
 // ===== PID =====
-#define KP  0.5
+#define KP  0.4
 #define KI  0.0
-#define KD  1.0
+#define KD  1.1
 
 // ===== DEBUG =====
 #define DEBUG_SERIAL     true
