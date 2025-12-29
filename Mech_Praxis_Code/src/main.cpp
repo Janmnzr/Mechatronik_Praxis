@@ -37,10 +37,12 @@ void checkInputSources();
 void executeCommand(char cmd);
 void printHelp();
 void printStatus();
+void motorISR();
+
 // Hilfsfunktion: Sendet Text an Serial UND Bluetooth
 void printBoth(String message) {
     Serial.print(message);
-    bt.print(message); // Hier wird angenommen, dass dein Bluetooth-Objekt 'bt' heißt
+    bt.print(message);
 }
 
 void printBoth(float value, int decimals = 2) {
@@ -57,15 +59,6 @@ void printlnBoth(float value, int decimals = 2) {
     Serial.println(value, decimals);
     bt.println(String(value, decimals));
 }
-// ===== Funktions-Deklarationen =====
-void followLine();
-void checkInputSources();
-void executeCommand(char cmd);
-void printHelp();
-void printStatus();
-// HIER NEU:
-void printBoth(String message);
-void printlnBoth(String message = "");
 
 // ===== Setup und Loop =====
 void setup() {
@@ -207,7 +200,6 @@ void executeCommand(char cmd) {
                 printlnBoth("\n>>> DEBUG-MODUS <<<");
                 printlnBoth("DEBUG-MODUS AKTIV");
                 printlnBoth("Sensorwerte werden angezeigt...");
-                printlnBoth("Sensorwerte werden angezeigt...");
                 currentMode = DEBUG;
             }
             break;
@@ -251,116 +243,93 @@ void executeCommand(char cmd) {
             
         case 'e':
         case 'E':
-           { 
             printlnBoth("Motoren aktiviert");
             enableMotors();
             break;
-           }
+            
         case 'r':
         case 'R':
-        {
             printlnBoth("Motoren deaktiviert");
             disableMotors();
             break;
-        }
+            
         case 'h':
         case 'H':
-        case '?':{
+        case '?':
             printHelp();
             bt.sendMenu();  // Menü auch über Bluetooth senden
             break;
-        }
-        case '1':{
+            
+        case '1':
             printlnBoth("\n>>> Wechsel zu Full Step (1/1) <<<");
             printlnBoth("Microstepping: Full Step (1/1)");
             setMicrostepping(FULL_STEP);
             break;
-        }
-        case '2':{
+            
+        case '2':
             printlnBoth("\n>>> Wechsel zu Half Step (1/2) <<<");
             printlnBoth("Microstepping: Half Step (1/2)");
             setMicrostepping(HALF_STEP);
             break;
-    }
-        case '4':{
+            
+        case '4':
             printlnBoth("\n>>> Wechsel zu Quarter Step (1/4) <<<");
             printlnBoth("Microstepping: Quarter Step (1/4)");
             setMicrostepping(QUARTER_STEP);
             break;
-            }
             
         case '8':
-        {
             printlnBoth("\n>>> Wechsel zu Eighth Step (1/8) <<<");
             printlnBoth("Microstepping: Eighth Step (1/8)");
             setMicrostepping(EIGHTH_STEP);
             break;
-        }
 
         case '6':
-        {
             printlnBoth("\n>>> Wechsel zu Sixteenth Step (1/16) <<<");
             printlnBoth("Microstepping: Sixteenth Step (1/16)");
             setMicrostepping(SIXTEENTH_STEP);
             break;
-        }
 
         case 'l':
         case 'L':
-        {
             printlnBoth("\n>>> Test: Links abbiegen <<<");
             printlnBoth("Links abbiegen");
             turnLeft();
             break;
-        }
+            
         case 'g':
         case 'G':
-        {
             printlnBoth("\n>>> Test: Rechts abbiegen <<<");
             printlnBoth("Rechts abbiegen");
             turnRight();
             break;
-        }
 
         case 'f':
         case 'F':
-        {
             printlnBoth("\n>>> Test: Vorwärts fahren <<<");
             printlnBoth("Vorwaerts");
             driveForward(500);
             break;
-        }
+            
         case 't':
         case 'T':
-        {
             printlnBoth("\n>>> Analog-Pin Raw-Test <<<");
             printlnBoth("\n>>> Analog-Test <<<");
-            printBoth("A0: "); printlnBoth(analogRead(A0));
             printlnBoth("A0: " + String(analogRead(A0)));
-            printBoth("A1: "); printlnBoth(analogRead(A1));
             printlnBoth("A1: " + String(analogRead(A1)));
-            printBoth("A2: "); printlnBoth(analogRead(A2));
             printlnBoth("A2: " + String(analogRead(A2)));
-            printBoth("A3: "); printlnBoth(analogRead(A3));
             printlnBoth("A3: " + String(analogRead(A3)));
-            printBoth("A4: "); printlnBoth(analogRead(A4));
             printlnBoth("A4: " + String(analogRead(A4)));
-            printBoth("A5: "); printlnBoth(analogRead(A5));
             printlnBoth("A5: " + String(analogRead(A5)));
-            printBoth("A6: "); printlnBoth(analogRead(A6));
             printlnBoth("A6: " + String(analogRead(A6)));
-            printBoth("A7: "); printlnBoth(analogRead(A7));
             printlnBoth("A7: " + String(analogRead(A7)));
             printlnBoth();
             break;
-        }
+            
         case 'p':
         case 'P':
-        {
-            printlnBoth("\n>>> PID Live-Werte <<<");
             printlnBoth("\n>>> PID Live-Werte <<<");
             printlnBoth("Position und Korrektur werden angezeigt...");
-            printlnBoth("Position und Korrektur:");
             printlnBoth("(Fahrzeug über Linie bewegen)");
             for (int i = 0; i < 10; i++) {
                 int pos = readLinePosition();
@@ -368,11 +337,11 @@ void executeCommand(char cmd) {
                 
                 // USB Serial
                 printBoth("Pos: ");
-                printBoth(pos);
+                printBoth(String(pos));
                 printBoth(" | Fehler: ");
-                printBoth(err);
+                printBoth(String(err, 1));
                 printBoth(" | Korrektur: ");
-                printlnBoth(err * KP);
+                printlnBoth(String(err * KP, 1));
                 
                 // Bluetooth (kompakt)
                 String pidMsg = "P:" + String(pos) + " E:" + String((int)err) + " C:" + String(err * KP, 1);
@@ -382,7 +351,7 @@ void executeCommand(char cmd) {
             }
             printlnBoth(">>> PID Test beendet <<<");
             break;
-        }
+            
         default:
             printlnBoth("Unbekannter Befehl. Druecke 'h' fuer Hilfe.");
             printlnBoth("Unbekannter Befehl");
@@ -496,7 +465,7 @@ void followLine() {
     float D = derivative;
     
     // PID-Korrektur berechnen
-    float correction = (KP * P) +  (KD * D);//(KI * I) +
+    float correction = (KP * P) + (KD * D);
     
     // Korrektur begrenzen um extreme Lenkbewegungen zu vermeiden
     correction = constrain(correction, -BASE_SPEED * 0.8, BASE_SPEED * 0.8);
@@ -504,20 +473,20 @@ void followLine() {
     lastError = error;
     
     // ===== Geschwindigkeiten berechnen =====
-float leftSpeed = BASE_SPEED + correction;
-float rightSpeed = BASE_SPEED - correction;
+    float leftSpeed = BASE_SPEED + correction;
+    float rightSpeed = BASE_SPEED - correction;
 
-// NEU: Bei großen Fehlern noch aggressiver reagieren
-if (abs(error) > 2000) {  // Sehr weit von Mitte entfernt
-    // Verdopple die Korrektur!
-    float extraCorrection = correction * 0.5;  // 50% extra
-    leftSpeed += extraCorrection;
-    rightSpeed -= extraCorrection;
-}
+    // NEU: Bei großen Fehlern noch aggressiver reagieren
+    if (abs(error) > 2000) {  // Sehr weit von Mitte entfernt
+        // Verdopple die Korrektur!
+        float extraCorrection = correction * 0.5;  // 50% extra
+        leftSpeed += extraCorrection;
+        rightSpeed -= extraCorrection;
+    }
 
     // Geschwindigkeiten begrenzen
-    leftSpeed = constrain(leftSpeed, -MAX_SPEED, MAX_SPEED);  // WICHTIG: Negativ erlauben!
-rightSpeed = constrain(rightSpeed, -MAX_SPEED, MAX_SPEED);
+    leftSpeed = constrain(leftSpeed, -MAX_SPEED, MAX_SPEED);
+    rightSpeed = constrain(rightSpeed, -MAX_SPEED, MAX_SPEED);
     
     setMotorSpeeds(leftSpeed, rightSpeed);
     
@@ -526,17 +495,17 @@ rightSpeed = constrain(rightSpeed, -MAX_SPEED, MAX_SPEED);
     static unsigned long lastPrint = 0;
     if (millis() - lastPrint > DEBUG_INTERVAL) {
         printBoth("Pos: ");
-        printBoth(position);
+        printBoth(String(position));
         printBoth(" | Err: ");
-        printBoth(error, 1);
+        printBoth(String(error, 1));
         printBoth(" | D: ");
-        printBoth(D, 1);
+        printBoth(String(D, 1));
         printBoth(" | Corr: ");
-        printBoth(correction, 1);
+        printBoth(String(correction, 1));
         printBoth(" | L: ");
-        printBoth(leftSpeed, 0);
+        printBoth(String(leftSpeed, 0));
         printBoth(" | R: ");
-        printBoth(rightSpeed, 0);
+        printBoth(String(rightSpeed, 0));
         
         // Status-Info
         if (greenDetected) {
@@ -595,12 +564,12 @@ void printStatus() {
     
     // Sensor-Info
     printBoth("Sensoren: ");
-    printBoth(NUM_SENSORS);
+    printBoth(String(NUM_SENSORS));
     printlnBoth(" Stück");
     
     int pos = readLinePosition();
     printBoth("Aktuelle Position: ");
-    printBoth(pos);
+    printBoth(String(pos));
     printBoth(" (Linie erkannt: ");
     printBoth(isLineDetected() ? "JA" : "NEIN");
     printlnBoth(")");
@@ -608,26 +577,26 @@ void printStatus() {
     // Motor-Info
     printlnBoth("\nMotor-Konfiguration:");
     printBoth("  Steps/Rev: ");
-    printlnBoth(STEPS_PER_REV);
+    printlnBoth(String(STEPS_PER_REV));
     printBoth("  Microstepping: 1/");
-    printlnBoth(MICROSTEPS);
+    printlnBoth(String(MICROSTEPS));
     printBoth("  Max Speed: ");
-    printBoth(MAX_SPEED);
+    printBoth(String(MAX_SPEED));
     printlnBoth(" steps/s");
     printBoth("  Base Speed: ");
-    printBoth(BASE_SPEED);
+    printBoth(String(BASE_SPEED));
     printlnBoth(" steps/s");
     
     // PID-Parameter
     printlnBoth("\nPID-Parameter:");
     printBoth("  KP: ");
-    printlnBoth(KP, 3);
+    printlnBoth(String(KP, 3));
     printBoth("  KI: ");
-    printlnBoth(KI, 3);
+    printlnBoth(String(KI, 3));
     printBoth("  KD: ");
-    printlnBoth(KD, 3);
+    printlnBoth(String(KD, 3));
     printBoth("  Deadzone: ");
-    printlnBoth(ERROR_DEADZONE);
+    printlnBoth(String(ERROR_DEADZONE));
     
     printlnBoth("\n====================\n");
 }

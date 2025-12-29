@@ -15,9 +15,9 @@ void initMotors() {
 
     // Enable-Pin konfigurieren (gemeinsam für beide Motoren)
     pinMode(ENABLE_PIN, OUTPUT);
-      // Erstmal disabled
     // Motoren enable Pin auf HIGH setzen um zu deaktivieren
     digitalWrite(ENABLE_PIN, HIGH);
+    
     // Microstepping-Pins konfigurieren - Motor 1 (Rechts)
     pinMode(MS1_PIN_1, OUTPUT);
     pinMode(MS2_PIN_1, OUTPUT);
@@ -54,6 +54,11 @@ void initMotors() {
 }
 
 void setMicrostepping(MicrostepMode mode) {
+    // ===== DEBUG: Funktion aufgerufen =====
+    Serial.println("\n=== setMicrostepping() aufgerufen ===");
+    Serial.print("Angefordeter Modus: ");
+    Serial.println((int)mode);
+    
     // Tabelle für A4988/DRV8825:
     // MS1  MS2  MS3  | Mode
     // L    L    L    | Full step (1/1)
@@ -67,45 +72,95 @@ void setMicrostepping(MicrostepMode mode) {
     switch(mode) {
         case FULL_STEP:
             ms1 = LOW; ms2 = LOW; ms3 = LOW;
-            Serial.println("Microstepping: Full Step (1/1)");
+            Serial.println("Setze: Full Step (1/1)");
             break;
         case HALF_STEP:
             ms1 = HIGH; ms2 = LOW; ms3 = LOW;
-            Serial.println("Microstepping: Half Step (1/2)");
+            Serial.println("Setze: Half Step (1/2)");
             break;
         case QUARTER_STEP:
             ms1 = LOW; ms2 = HIGH; ms3 = LOW;
-            Serial.println("Microstepping: Quarter Step (1/4)");
+            Serial.println("Setze: Quarter Step (1/4)");
             break;
         case EIGHTH_STEP:
             ms1 = HIGH; ms2 = HIGH; ms3 = LOW;
-            Serial.println("Microstepping: Eighth Step (1/8)");
+            Serial.println("Setze: Eighth Step (1/8)");
             break;
         case SIXTEENTH_STEP:
             ms1 = HIGH; ms2 = HIGH; ms3 = HIGH;
-            Serial.println("Microstepping: Sixteenth Step (1/16)");
+            Serial.println("Setze: Sixteenth Step (1/16)");
             break;
         default:
             ms1 = HIGH; ms2 = HIGH; ms3 = LOW;  // Default: 1/8
-            Serial.println("Microstepping: Eighth Step (1/8) [Default]");
+            Serial.println("Setze: Eighth Step (1/8) [Default]");
     }
     
-    // Motor 1 (Rechts) MS-Pins setzen
-    digitalWrite(MS1_PIN_1, ms1);
-    digitalWrite(MS2_PIN_1, ms2);
-    digitalWrite(MS3_PIN_1, ms3);
-    
-    // Motor 2 (Links) MS-Pins setzen
-    digitalWrite(MS1_PIN_2, ms1);
-    digitalWrite(MS2_PIN_2, ms2);
-    digitalWrite(MS3_PIN_2, ms3);
-    
-    Serial.print("  MS1=");
+    Serial.print("  Ziel MS1=");
     Serial.print(ms1 ? "HIGH" : "LOW");
     Serial.print(", MS2=");
     Serial.print(ms2 ? "HIGH" : "LOW");
     Serial.print(", MS3=");
     Serial.println(ms3 ? "HIGH" : "LOW");
+    
+    // ===== Motor 1 (Rechts) MS-Pins setzen =====
+    Serial.println("Setze Motor 1 (Rechts) Pins...");
+    Serial.print("  Pin ");
+    Serial.print(MS1_PIN_1);
+    Serial.print(" (MS1) -> ");
+    digitalWrite(MS1_PIN_1, ms1);
+    Serial.println(ms1 ? "HIGH" : "LOW");
+    
+    Serial.print("  Pin ");
+    Serial.print(MS2_PIN_1);
+    Serial.print(" (MS2) -> ");
+    digitalWrite(MS2_PIN_1, ms2);
+    Serial.println(ms2 ? "HIGH" : "LOW");
+    
+    Serial.print("  Pin ");
+    Serial.print(MS3_PIN_1);
+    Serial.print(" (MS3) -> ");
+    digitalWrite(MS3_PIN_1, ms3);
+    Serial.println(ms3 ? "HIGH" : "LOW");
+    
+    // ===== Motor 2 (Links) MS-Pins setzen =====
+    Serial.println("Setze Motor 2 (Links) Pins...");
+    Serial.print("  Pin ");
+    Serial.print(MS1_PIN_2);
+    Serial.print(" (MS1) -> ");
+    digitalWrite(MS1_PIN_2, ms1);
+    Serial.println(ms1 ? "HIGH" : "LOW");
+    
+    Serial.print("  Pin ");
+    Serial.print(MS2_PIN_2);
+    Serial.print(" (MS2) -> ");
+    digitalWrite(MS2_PIN_2, ms2);
+    Serial.println(ms2 ? "HIGH" : "LOW");
+    
+    Serial.print("  Pin ");
+    Serial.print(MS3_PIN_2);
+    Serial.print(" (MS3) -> ");
+    digitalWrite(MS3_PIN_2, ms3);
+    Serial.println(ms3 ? "HIGH" : "LOW");
+    
+    // ===== Kurz warten und verifizieren =====
+    delay(10);
+    
+    Serial.println("\nVerifizierung - Pins lesen:");
+    Serial.print("Motor 1: MS1=");
+    Serial.print(digitalRead(MS1_PIN_1) ? "HIGH" : "LOW");
+    Serial.print(", MS2=");
+    Serial.print(digitalRead(MS2_PIN_1) ? "HIGH" : "LOW");
+    Serial.print(", MS3=");
+    Serial.println(digitalRead(MS3_PIN_1) ? "HIGH" : "LOW");
+    
+    Serial.print("Motor 2: MS1=");
+    Serial.print(digitalRead(MS1_PIN_2) ? "HIGH" : "LOW");
+    Serial.print(", MS2=");
+    Serial.print(digitalRead(MS2_PIN_2) ? "HIGH" : "LOW");
+    Serial.print(", MS3=");
+    Serial.println(digitalRead(MS3_PIN_2) ? "HIGH" : "LOW");
+    
+    Serial.println("=== setMicrostepping() abgeschlossen ===\n");
 }
 
 void enableMotors() {
@@ -131,15 +186,6 @@ void stopMotors() {
     motorLeft.stop();
     motorRight.stop();
 }
-
-/*void motorISR() {
-    // Diese Funktion wird vom Timer 25.000 Mal pro Sekunde aufgerufen
-    // Sie muss so kurz wie möglich sein!
-    if (motorLeft.speed() != 0 || motorRight.speed() != 0) {
-        motorLeft.runSpeed();
-        motorRight.runSpeed();
-    }
-}*/
 
 void printMotorStatus() {
     Serial.println("=== Motor Status ===");
@@ -206,7 +252,7 @@ void driveForward(unsigned long duration_ms) {
     setMotorSpeeds(BASE_SPEED, BASE_SPEED);
     
     while (millis() - startTime < duration_ms) {
-        
+        // Warten
     }
     
     stopMotors();
@@ -214,7 +260,6 @@ void driveForward(unsigned long duration_ms) {
 
 void turnLeft() {
     // 90° Links-Kurve
-    // Zeitbasiert - kann später durch Encoder/Sensor ersetzt werden
     Serial.println(">>> LINKS ABBIEGEN <<<");
     
     // Erst etwas vorfahren um Kreuzung zu verlassen
@@ -226,8 +271,8 @@ void turnLeft() {
     setMotorSpeeds(-TURN_SPEED, TURN_SPEED);
     
     // Dauer für ca. 90° (muss kalibriert werden!)
-    while (millis() - startTime < 1200) {  // 800ms für 90° - anpassen!
-        
+    while (millis() - startTime < 1200) {  // 1200ms für 90° - anpassen!
+        // Warten
     }
     
     stopMotors();
@@ -249,8 +294,8 @@ void turnRight() {
     setMotorSpeeds(TURN_SPEED, -TURN_SPEED);
     
     // Dauer für ca. 90° (muss kalibriert werden!)
-    while (millis() - startTime < 1200) {  // 800ms für 90° - anpassen!
-       
+    while (millis() - startTime < 1200) {  // 1200ms für 90° - anpassen!
+        // Warten
     }
     
     stopMotors();
@@ -262,11 +307,6 @@ void turnRight() {
 void driveStraight(int distance_mm) {
     // Fährt eine bestimmte Distanz geradeaus
     // Umrechnung: distance_mm → steps
-    // Bei NEMA 17 mit Rad-Durchmesser müsst ihr das anpassen
-    
-    // Beispiel: 200 steps/rev, 1/8 microstep = 1600 steps/rev
-    // Raddurchmesser z.B. 65mm → Umfang = 204mm
-    // Steps pro mm = 1600 / 204 ≈ 7.8 steps/mm
     
     float stepsPerMM = (STEPS_PER_REV * MICROSTEPS) / 220.0;  // Anpassen!
     long targetSteps = distance_mm * stepsPerMM;
