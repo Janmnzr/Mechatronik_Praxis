@@ -1,35 +1,28 @@
 #include "motors.h"
 #include "config.h"
 
-// Motor-Objekte initialisieren (DRIVER-Modus: STEP, DIR)
 AccelStepper motorRight(AccelStepper::DRIVER, STEP_PIN_R, DIR_PIN_R);
 AccelStepper motorLeft(AccelStepper::DRIVER, STEP_PIN_L, DIR_PIN_L);
 
 void initMotors() {
     Serial.println("Initialisiere Motoren...");
 
-    // Motor-Richtung invertieren (DIR-Pin umkehren)
     motorRight.setPinsInverted(true, false, false);
     motorLeft.setPinsInverted(true, false, false);
 
-    // Enable-Pin konfigurieren
     pinMode(ENABLE_PIN, OUTPUT);
-    digitalWrite(ENABLE_PIN, HIGH);  // Erstmal disabled
+    digitalWrite(ENABLE_PIN, HIGH);
     
-    // ===== Microstepping-Pins für 1/8 Step (FEST) =====
     Serial.println("Setze Microstepping auf 1/8 Step (FEST)...");
     
-    // Motor 1 (Rechts) - MS-Pins konfigurieren
     pinMode(MS1_PIN_1, OUTPUT);
     pinMode(MS2_PIN_1, OUTPUT);
     pinMode(MS3_PIN_1, OUTPUT);
     
-    // Motor 2 (Links) - MS-Pins konfigurieren
     pinMode(MS1_PIN_2, OUTPUT);
     pinMode(MS2_PIN_2, OUTPUT);
     pinMode(MS3_PIN_2, OUTPUT);
     
-    // 1/8 Step Konfiguration: MS1=HIGH, MS2=HIGH, MS3=LOW
     digitalWrite(MS1_PIN_1, HIGH);
     digitalWrite(MS2_PIN_1, HIGH);
     digitalWrite(MS3_PIN_1, LOW);
@@ -38,9 +31,8 @@ void initMotors() {
     digitalWrite(MS2_PIN_2, HIGH);
     digitalWrite(MS3_PIN_2, LOW);
     
-    delay(10);  // Kurz warten
+    delay(10);
     
-    // Verifizierung
     Serial.println("Microstepping-Pins gesetzt:");
     Serial.print("  Motor 1 (Rechts): MS1=");
     Serial.print(digitalRead(MS1_PIN_1) ? "HIGH" : "LOW");
@@ -56,19 +48,14 @@ void initMotors() {
     Serial.print(", MS3=");
     Serial.println(digitalRead(MS3_PIN_2) ? "HIGH" : "LOW");
     
-    Serial.println("Erwartete Konfiguration: MS1=HIGH, MS2=HIGH, MS3=LOW");
-    
-    // Rechter Motor konfigurieren
     motorRight.setMaxSpeed(MAX_SPEED);
     motorRight.setAcceleration(ACCELERATION);
     motorRight.setSpeed(0);
     
-    // Linker Motor konfigurieren
     motorLeft.setMaxSpeed(MAX_SPEED);
     motorLeft.setAcceleration(ACCELERATION);
     motorLeft.setSpeed(0);
     
-    // Motoren aktivieren
     enableMotors();
     
     Serial.println("Motoren initialisiert");
@@ -80,17 +67,16 @@ void initMotors() {
 }
 
 void enableMotors() {
-    digitalWrite(ENABLE_PIN, LOW);  // LOW = Enabled
+    digitalWrite(ENABLE_PIN, LOW);
     Serial.println("Motoren aktiviert (ENABLE=LOW)");
 }
 
 void disableMotors() {
-    digitalWrite(ENABLE_PIN, HIGH);  // HIGH = Disabled
+    digitalWrite(ENABLE_PIN, HIGH);
     Serial.println("Motoren deaktiviert (ENABLE=HIGH)");
 }
 
 void setMotorSpeeds(float leftSpeed, float rightSpeed) {
-    // Geschwindigkeiten begrenzen
     leftSpeed = constrain(leftSpeed, -MAX_SPEED, MAX_SPEED);
     rightSpeed = constrain(rightSpeed, -MAX_SPEED, MAX_SPEED);
     
@@ -150,48 +136,94 @@ void driveForward(unsigned long duration_ms) {
     stopMotors();
 }
 
-void turnLeft() {
-    Serial.println(">>> LINKS ABBIEGEN <<<");
+// ===== NEUE: Zwei Arten von Links-Kurven =====
+
+void turnLeftSharp() {
+    // SCHARFE 90° Links-Drehung (für T-Kreuzung)
+    Serial.println(">>> LINKS ABBIEGEN (SCHARF) <<<");
     
-    // Erst etwas vorfahren um Kreuzung zu verlassen
-    driveForward(200);
-    delay(100);
+    driveForward(150);  // Kurz vorfahren
+    delay(50);
     
-    // Drehung: Linker Motor rückwärts, rechter vorwärts
+    // Spot-Turn: Ein Motor rückwärts, einer vorwärts
     unsigned long startTime = millis();
     setMotorSpeeds(-TURN_SPEED, TURN_SPEED);
     
-    // Dauer für ca. 90°
-    while (millis() - startTime < 1200) {
+    while (millis() - startTime < SHARP_TURN_DURATION) {
         // Warten
     }
     
     stopMotors();
     delay(100);
     
-    Serial.println("Links-Kurve abgeschlossen");
+    Serial.println("Scharfe Links-Kurve abgeschlossen");
 }
 
-void turnRight() {
-    Serial.println(">>> RECHTS ABBIEGEN <<<");
+void turnLeftSmooth() {
+    // SANFTE 90° Links-Kurve (für normale 90° Bögen)
+    Serial.println(">>> LINKS KURVE (SANFT) <<<");
     
-    // Erst etwas vorfahren
-    driveForward(200);
+    // Langsamer fahren, links langsamer als rechts
+    unsigned long startTime = millis();
+    setMotorSpeeds(CURVE_SPEED * 0.3, CURVE_SPEED);  // Links 30%, rechts 100%
+    
+    while (millis() - startTime < SMOOTH_CURVE_DURATION) {
+        // Warten
+    }
+    
+    stopMotors();
     delay(100);
     
-    // Drehung: Rechter Motor rückwärts, linker vorwärts
+    Serial.println("Sanfte Links-Kurve abgeschlossen");
+}
+
+void turnLeft() {
+    // Standard: Scharfe Kurve
+    turnLeftSharp();
+}
+
+// ===== NEUE: Zwei Arten von Rechts-Kurven =====
+
+void turnRightSharp() {
+    // SCHARFE 90° Rechts-Drehung (für T-Kreuzung)
+    Serial.println(">>> RECHTS ABBIEGEN (SCHARF) <<<");
+    
+    driveForward(150);
+    delay(50);
+    
     unsigned long startTime = millis();
     setMotorSpeeds(TURN_SPEED, -TURN_SPEED);
     
-    // Dauer für ca. 90°
-    while (millis() - startTime < 1200) {
+    while (millis() - startTime < SHARP_TURN_DURATION) {
         // Warten
     }
     
     stopMotors();
     delay(100);
     
-    Serial.println("Rechts-Kurve abgeschlossen");
+    Serial.println("Scharfe Rechts-Kurve abgeschlossen");
+}
+
+void turnRightSmooth() {
+    // SANFTE 90° Rechts-Kurve (für normale 90° Bögen)
+    Serial.println(">>> RECHTS KURVE (SANFT) <<<");
+    
+    unsigned long startTime = millis();
+    setMotorSpeeds(CURVE_SPEED, CURVE_SPEED * 0.3);  // Links 100%, rechts 30%
+    
+    while (millis() - startTime < SMOOTH_CURVE_DURATION) {
+        // Warten
+    }
+    
+    stopMotors();
+    delay(100);
+    
+    Serial.println("Sanfte Rechts-Kurve abgeschlossen");
+}
+
+void turnRight() {
+    // Standard: Scharfe Kurve
+    turnRightSharp();
 }
 
 void driveStraight(int distance_mm) {

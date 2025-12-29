@@ -14,13 +14,25 @@ int readLinePosition();
 void printSensorValues();
 bool isLineDetected();
 
-// Kreuzungs-Erkennung
-bool isCrossing();
-bool hasGreenMarkerLeft();
-bool hasGreenMarkerRight();
-bool hasGreenMarker();  // Neu: Erkennt Grün auf beiden Seiten
-int getActiveSensorCount();
-int getGreenSensorCount(bool left);  // Neu: Zählt grüne Sensoren
+// ===== VERBESSERTE Kreuzungs-Erkennung =====
+
+// Grundlegende Erkennung
+bool isCrossing();              // T-Kreuzung (viele Sensoren)
+bool is90DegreeCurve();         // 90° Kurve (wenige Sensoren)
+int getActiveSensorCount();     // Zählt schwarze Sensoren
+
+// Grün-Erkennung
+bool hasGreenMarkerLeft();      // Grün links
+bool hasGreenMarkerRight();     // Grün rechts
+bool hasGreenMarker();          // Grün irgendwo
+int getGreenSensorCount(bool left);  // Zählt grüne Sensoren
+
+// NEU: Verbesserte Linienverlust-Erkennung
+bool isLineLost();              // Linie komplett verloren?
+int getMiddleSensorCount();     // Zählt mittlere Sensoren (3,4,5)
+
+// Debug
 void printCrossingDebug();
+void printGreenDebug();         // NEU: Detailliertes Grün-Debug
 
 #endif

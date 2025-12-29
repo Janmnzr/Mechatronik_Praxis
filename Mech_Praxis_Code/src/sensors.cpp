@@ -7,7 +7,6 @@ uint16_t sensorValues[NUM_SENSORS];
 void initSensors() {
     Serial.println("Initialisiere QTR-MD-08A Sensoren (ANALOG-Modus)...");
     
-    // WICHTIG: Zuerst testen ob Analog funktioniert
     Serial.println("\nTest: Analog-Pins direkt auslesen...");
     Serial.print("A0: "); Serial.println(analogRead(A0));
     Serial.print("A1: "); Serial.println(analogRead(A1));
@@ -19,30 +18,19 @@ void initSensors() {
     Serial.print("A7: "); Serial.println(analogRead(A7));
     Serial.println();
     
-    // Sensor-Pins konfigurieren (Analog-Pins)
     uint8_t sensorPins[] = {
         QTR_PIN_1, QTR_PIN_2, QTR_PIN_3, QTR_PIN_4,
         QTR_PIN_5, QTR_PIN_6, QTR_PIN_7, QTR_PIN_8
     };
     
-    // QTR-MD-08A im Analog-Modus betreiben
     qtr.setTypeAnalog();
     qtr.setSensorPins(sensorPins, NUM_SENSORS);
-    
-    // Optional: Emitter-Pin setzen (falls IR-LEDs geschaltet werden)
-    // qtr.setEmitterPin(QTR_EMITTER_PIN);
-    
-    // Anzahl der Samples pro Messung (für Rauschunterdrückung)
-    // Standard ist 4, höhere Werte = glattere aber langsamere Messung
-    // Werte: 1, 2, 4, 8, 16, 32, 64, 128
-    // qtr.setSamplesPerSensor(SENSOR_SAMPLES);
     
     Serial.println("Sensoren initialisiert (Analog)");
     Serial.print("Anzahl Sensoren: ");
     Serial.println(NUM_SENSORS);
     Serial.println("Analog-Pins: A0-A7");
     
-    // Test-Messung
     uint16_t testValues[NUM_SENSORS];
     qtr.read(testValues);
     Serial.print("\nTest-Messung (RAW): ");
@@ -52,7 +40,6 @@ void initSensors() {
     }
     Serial.println();
     
-    // Warnung bei allen Nullen
     bool allZero = true;
     for (uint8_t i = 0; i < NUM_SENSORS; i++) {
         if (testValues[i] != 0) {
@@ -63,11 +50,7 @@ void initSensors() {
     
     if (allZero) {
         Serial.println("\n!!! WARNUNG: ALLE SENSOREN GEBEN 0 ZURÜCK !!!");
-        Serial.println("Prüfe:");
-        Serial.println("  1. VCC → 5V am QTR-Board?");
-        Serial.println("  2. GND → GND verbunden?");
-        Serial.println("  3. OUT1-8 korrekt an A0-A7?");
-        Serial.println("  4. IR-LEDs leuchten? (Mit Handy-Kamera prüfen)");
+        Serial.println("Prüfe Verkabelung!");
         Serial.println();
     }
 }
@@ -76,21 +59,17 @@ void calibrateSensors() {
     Serial.println("\n=== KALIBRIERUNG STARTET ===");
     Serial.println("Fahrzeug jetzt langsam ueber die Linie bewegen!");
     Serial.println("Schwenke nach links und rechts...");
+    Serial.println("WICHTIG: Auch ueber gruene Quadrate fahren!");
     Serial.println("Kalibrierung dauert 10 Sekunden\n");
     
-    delay(2000);  // 2 Sekunden Vorbereitungszeit
+    delay(2000);
     
-    // LED-Feedback (Arduino Mega hat LED an Pin 13)
     pinMode(LED_BUILTIN, OUTPUT);
     
-    // 10 Sekunden kalibrieren (400 Messungen @ 25ms)
     for (uint16_t i = 0; i < 400; i++) {
         qtr.calibrate();
-        
-        // LED blinkt während Kalibrierung
         digitalWrite(LED_BUILTIN, (i / 20) % 2);
         
-        // Fortschrittsanzeige alle Sekunde
         if (i % 40 == 0) {
             Serial.print(".");
         }
@@ -102,7 +81,6 @@ void calibrateSensors() {
     
     Serial.println("\n\n=== KALIBRIERUNG ABGESCHLOSSEN ===\n");
     
-    // Kalibrierungswerte ausgeben
     Serial.println("Minimum-Werte:");
     for (uint8_t i = 0; i < NUM_SENSORS; i++) {
         Serial.print("S");
@@ -125,14 +103,8 @@ void calibrateSensors() {
 }
 
 int readLinePosition() {
-    // Position auslesen: 0 (ganz links) bis 7000 (ganz rechts)
-    // Bei 8 Sensoren: Mitte = 3500
-    // Im Analog-Modus liefert readLineBlack() Werte von 0-1000 pro Sensor
-    // readLineBlack() für schwarze Linie auf weißem Grund
-    // readLineWhite() für weiße Linie auf schwarzem Grund
     uint16_t position = qtr.readLineBlack(sensorValues);
     
-    // Debug: Position und Sensor-Aktivität
     static unsigned long lastDebug = 0;
     if (millis() - lastDebug > 500) {
         Serial.print("Position: ");
@@ -152,7 +124,6 @@ int readLinePosition() {
 }
 
 bool isLineDetected() {
-    // Prüft, ob mindestens ein Sensor eine Linie erkennt
     for (uint8_t i = 0; i < NUM_SENSORS; i++) {
         if (sensorValues[i] > LINE_THRESHOLD) {
             return true;
@@ -172,8 +143,9 @@ void printSensorValues() {
     Serial.println();
 }
 
+// ===== VERBESSERTE Erkennungs-Funktionen =====
+
 int getActiveSensorCount() {
-    // Zählt wie viele Sensoren die Linie sehen
     int count = 0;
     for (uint8_t i = 0; i < NUM_SENSORS; i++) {
         if (sensorValues[i] > LINE_THRESHOLD) {
@@ -183,18 +155,52 @@ int getActiveSensorCount() {
     return count;
 }
 
+int getMiddleSensorCount() {
+    // Zählt nur mittlere Sensoren (Index 2,3,4,5)
+    int count = 0;
+    for (uint8_t i = 2; i <= 5; i++) {
+        if (sensorValues[i] > LINE_THRESHOLD) {
+            count++;
+        }
+    }
+    return count;
+}
+
 bool isCrossing() {
-    // Kreuzung erkannt wenn mindestens CROSSING_THRESHOLD Sensoren aktiv
-    // Dies erkennt Querlinien (T-Kreuzung, Kreuzung, etc.)
-    readLinePosition();  // Sensoren aktualisieren
+    // T-Kreuzung: VIELE Sensoren sehen Linie (mindestens 6)
+    readLinePosition();
     int activeCount = getActiveSensorCount();
     return (activeCount >= CROSSING_THRESHOLD);
 }
 
+bool is90DegreeCurve() {
+    // 90° Kurve: WENIGE mittlere Sensoren (3-5), aber nicht alle
+    readLinePosition();
+    int middleCount = getMiddleSensorCount();
+    int totalCount = getActiveSensorCount();
+    
+    // Kurve = 3-5 mittlere Sensoren aktiv, aber nicht mehr als 5 total
+    bool isCurve = (middleCount >= CURVE_THRESHOLD && totalCount <= 5);
+    
+    #if DEBUG_GREEN
+    if (isCurve) {
+        Serial.print("[90° KURVE ERKANNT] Mitte: ");
+        Serial.print(middleCount);
+        Serial.print(", Total: ");
+        Serial.println(totalCount);
+    }
+    #endif
+    
+    return isCurve;
+}
+
+bool isLineLost() {
+    // Linie komplett verloren = weniger als 2 Sensoren
+    int count = getActiveSensorCount();
+    return (count < 2);
+}
+
 int getGreenSensorCount(bool left) {
-    // Zählt wie viele Sensoren Grün sehen
-    // left = true: Sensoren 0-2 (links)
-    // left = false: Sensoren 5-7 (rechts)
     readLinePosition();
     int count = 0;
     
@@ -218,21 +224,75 @@ int getGreenSensorCount(bool left) {
 }
 
 bool hasGreenMarkerLeft() {
-    // Prüft ob linke Sensoren (0-2) grünes Quadrat erkennen
-    // Mindestens GREEN_SENSOR_COUNT Sensoren müssen Grün sehen
     int greenCount = getGreenSensorCount(true);
-    return (greenCount >= GREEN_SENSOR_COUNT);
+    bool detected = (greenCount >= GREEN_SENSOR_COUNT);
+    
+    #if DEBUG_GREEN
+    if (detected) {
+        Serial.print("[GRÜN LINKS] ");
+        Serial.print(greenCount);
+        Serial.println(" Sensoren");
+    }
+    #endif
+    
+    return detected;
 }
 
 bool hasGreenMarkerRight() {
-    // Prüft ob rechte Sensoren (5-7) grünes Quadrat erkennen
     int greenCount = getGreenSensorCount(false);
-    return (greenCount >= GREEN_SENSOR_COUNT);
+    bool detected = (greenCount >= GREEN_SENSOR_COUNT);
+    
+    #if DEBUG_GREEN
+    if (detected) {
+        Serial.print("[GRÜN RECHTS] ");
+        Serial.print(greenCount);
+        Serial.println(" Sensoren");
+    }
+    #endif
+    
+    return detected;
 }
 
 bool hasGreenMarker() {
-    // Prüft ob irgendwo ein grünes Quadrat erkannt wird
     return hasGreenMarkerLeft() || hasGreenMarkerRight();
+}
+
+void printGreenDebug() {
+    Serial.println("\n=== GRÜN-DEBUG ===");
+    
+    int leftGreen = getGreenSensorCount(true);
+    int rightGreen = getGreenSensorCount(false);
+    
+    Serial.print("Grün-Sensoren Links (0-2): ");
+    Serial.print(leftGreen);
+    Serial.print(" / 3");
+    if (leftGreen >= GREEN_SENSOR_COUNT) {
+        Serial.print(" ✓ ERKANNT");
+    }
+    Serial.println();
+    
+    Serial.print("Grün-Sensoren Rechts (5-7): ");
+    Serial.print(rightGreen);
+    Serial.print(" / 3");
+    if (rightGreen >= GREEN_SENSOR_COUNT) {
+        Serial.print(" ✓ ERKANNT");
+    }
+    Serial.println();
+    
+    Serial.print("Sensor-Werte: ");
+    for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+        Serial.print(sensorValues[i]);
+        
+        if (sensorValues[i] >= GREEN_MIN && sensorValues[i] <= GREEN_MAX) {
+            Serial.print("[G]");
+        } else if (sensorValues[i] > LINE_THRESHOLD) {
+            Serial.print("[B]");
+        } else {
+            Serial.print("[W]");
+        }
+        Serial.print("  ");
+    }
+    Serial.println("\n");
 }
 
 void printCrossingDebug() {
@@ -242,6 +302,9 @@ void printCrossingDebug() {
     Serial.print(" / ");
     Serial.println(NUM_SENSORS);
     
+    Serial.print("Mittlere Sensoren (2-5): ");
+    Serial.println(getMiddleSensorCount());
+    
     Serial.print("Grün-Sensoren Links: ");
     Serial.print(getGreenSensorCount(true));
     Serial.println(" / 3");
@@ -250,8 +313,11 @@ void printCrossingDebug() {
     Serial.print(getGreenSensorCount(false));
     Serial.println(" / 3");
     
-    Serial.print("Ist Kreuzung: ");
+    Serial.print("Ist T-Kreuzung (>=6): ");
     Serial.println(isCrossing() ? "JA" : "NEIN");
+    
+    Serial.print("Ist 90° Kurve: ");
+    Serial.println(is90DegreeCurve() ? "JA" : "NEIN");
     
     Serial.print("Grün Links: ");
     Serial.println(hasGreenMarkerLeft() ? "JA" : "NEIN");
@@ -263,15 +329,11 @@ void printCrossingDebug() {
     for (uint8_t i = 0; i < NUM_SENSORS; i++) {
         Serial.print(sensorValues[i]);
         
-        // Markiere grüne Werte
         if (sensorValues[i] >= GREEN_MIN && sensorValues[i] <= GREEN_MAX) {
             Serial.print("[G]");
-        }
-        // Markiere schwarze Werte
-        else if (sensorValues[i] > LINE_THRESHOLD) {
+        } else if (sensorValues[i] > LINE_THRESHOLD) {
             Serial.print("[B]");
-        }
-        else {
+        } else {
             Serial.print("[W]");
         }
         

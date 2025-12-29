@@ -36,38 +36,51 @@
 #define NUM_SENSORS  8
 
 // ===== Linien-Erkennung =====
-#define LINE_THRESHOLD   700   // Schwellwert für schwarze Linie (0-1000, nach Kalibrierung)
+#define LINE_THRESHOLD   700   // Schwellwert für schwarze Linie (0-1000)
 
-// ===== Kreuzungs-Erkennung =====
-#define GREEN_MIN        70   // Minimaler Wert für grünes Quadrat
+// ===== VERBESSERTE Kreuzungs-Erkennung =====
+#define GREEN_MIN        70    // Minimaler Wert für grünes Quadrat
 #define GREEN_MAX        350   // Maximaler Wert für grünes Quadrat
 #define GREEN_SENSOR_COUNT 2   // Mindestens 2 Sensoren müssen Grün sehen
-#define CROSSING_THRESHOLD 6   // Mindestanzahl aktiver Sensoren für Kreuzung
-#define CROSSING_DELAY   1000  // Verzögerung nach Kreuzungserkennung (ms)
-#define GREEN_DETECTION_TIME 150  // Zeit zum Erkennen von Grün bevor Kreuzung (ms)
-#define FORWARD_BEFORE_TURN 300   // mm vorwärts fahren vor Abbiegung
+
+// Kreuzung = viele Sensoren sehen schwarz (T-Kreuzung)
+#define CROSSING_THRESHOLD 6   // Mind. 6 von 8 Sensoren für T-Kreuzung
+
+// 90° Kurve = wenige mittlere Sensoren sehen schwarz, aber Grün wurde erkannt
+#define CURVE_THRESHOLD    3   // Mind. 3 Sensoren für 90° Kurve
+
+// Zeitfenster: Wie lange bleibt Grün "aktiv" nach Erkennung?
+#define GREEN_MEMORY_TIME  2500  // 2,5 Sekunden Grün-Gedächtnis (war 2000ms)
+
+// Verzögerung zwischen Abbiegungen
+#define TURN_COOLDOWN     2000   // 2 Sekunden zwischen Abbiegungen
+
+// Vorwärtsfahrt vor Abbiegung
+#define FORWARD_BEFORE_TURN 200  // mm vorwärts (REDUZIERT von 300)
 
 // ===== Motor-Parameter =====
-#define STEPS_PER_REV    200   // Standard NEMA 17: 200 Steps/Revolution (1.8° pro Schritt)
-#define MICROSTEPS       8     // FEST: 1/8 Microstepping (Eighth Step)
+#define STEPS_PER_REV    200   // Standard NEMA 17: 200 Steps/Revolution
+#define MICROSTEPS       8     // FEST: 1/8 Microstepping
 #define MAX_SPEED        1600  // Steps/Sekunde
 #define BASE_SPEED       500   // Basis-Geschwindigkeit
 #define TURN_SPEED       400   // Geschwindigkeit bei Kurven
 #define ACCELERATION     1000  // Steps/Sekunde²
 
-// ===== PID-Parameter (OPTIMIERT gegen Überregeln) =====
+// ===== NEUE: Kurvenfahrt-Parameter =====
+#define CURVE_SPEED      350   // Geschwindigkeit bei sanften 90° Kurven
+#define SHARP_TURN_DURATION 1200  // Dauer für scharfe 90° Drehung (T-Kreuzung)
+#define SMOOTH_CURVE_DURATION 800 // Dauer für sanfte 90° Kurve
+
+// ===== PID-Parameter =====
 #define KP  0.5    // Proportional
 #define KI  0.0    // Integral
 #define KD  1.0    // Derivative
 
-// TUNING-HINWEISE:
-// - Wenn Auto zu langsam reagiert: KP leicht erhöhen (0.55, 0.6...)
-// - Wenn Auto zittert/oszilliert: KD erhöhen (1.2, 1.5...)
-// - Wenn Auto bei Geraden abdriftet: KI leicht aktivieren (0.001, 0.002...)
-// - BASE_SPEED kann nach erfolgreicher Abstimmung schrittweise erhöht werden
-
 // ===== Debuging =====
-#define DEBUG_SERIAL     true  // Serial-Debug-Ausgaben
+#define DEBUG_SERIAL     true
 #define DEBUG_INTERVAL   100   // Debug-Ausgabe alle X ms
+
+// ===== NEUE: Grün-Erkennungs-Debug =====
+#define DEBUG_GREEN      true  // Zeigt Grün-Erkennungen ausführlich an
 
 #endif
