@@ -7,6 +7,7 @@
 // Globales Sensor-Objekt
 extern QTRSensors qtr;
 
+
 // Funktionen
 void initSensors();
 void calibrateSensors();

@@ -53,6 +53,7 @@ BallColor detectBallColor(RGBColor color);
 String getBallColorName(BallColor color);
 void calibrateBallColor();
 
+
 // Helper-Funktionen für TCS34725 (direkte I²C-Kommunikation)
 void tcs34725_write8(uint8_t reg, uint8_t value);
 uint8_t tcs34725_read8(uint8_t reg);

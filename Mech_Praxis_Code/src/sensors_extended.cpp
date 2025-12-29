@@ -521,6 +521,7 @@ void printSensorStatus() {
     }
     Serial.println();
     
+    
     // Servo
     Serial.println("--- SERVO ---");
     int pos = gripperServo.read();

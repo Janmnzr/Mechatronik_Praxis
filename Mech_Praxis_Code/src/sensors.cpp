@@ -269,6 +269,7 @@ void printCrossingDebug() {
     Serial.print("Grün Rechts: ");
     Serial.println(hasGreenMarkerRight() ? "JA" : "NEIN");
     
+    
     Serial.print("Werte: ");
     for (uint8_t i = 0; i < NUM_SENSORS; i++) {
         Serial.print(sensorValues[i]);

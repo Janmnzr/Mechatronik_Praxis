@@ -8,6 +8,7 @@ BluetoothManager::BluetoothManager(HardwareSerial* port, long baud) {
     this->baudRate = baud;
 }
 
+
 void BluetoothManager::init() {
     serialPort->begin(baudRate);
     delay(100);

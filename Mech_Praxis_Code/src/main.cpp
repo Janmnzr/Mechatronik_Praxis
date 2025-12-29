@@ -536,6 +536,7 @@ void printStatus() {
         printlnBoth("  >>> Zeit verbleibend: " + String(timeLeft/1000) + " Sekunden");
     }
     
+    
     printlnBoth("\nMotor-Konfiguration:");
     printlnBoth("  Microstepping: FEST 1/" + String(MICROSTEPS));
     printlnBoth("  Max Speed: " + String(MAX_SPEED) + " steps/s");
