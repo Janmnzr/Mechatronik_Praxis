@@ -177,11 +177,6 @@ void turnLeftSmooth() {
     Serial.println("Sanfte Links-Kurve abgeschlossen");
 }
 
-void turnLeft() {
-    // Standard: Scharfe Kurve
-    turnLeftSharp();
-}
-
 // ===== NEUE: Zwei Arten von Rechts-Kurven =====
 
 void turnRightSharp() {
@@ -219,28 +214,4 @@ void turnRightSmooth() {
     delay(100);
     
     Serial.println("Sanfte Rechts-Kurve abgeschlossen");
-}
-
-void turnRight() {
-    // Standard: Scharfe Kurve
-    turnRightSharp();
-}
-
-
-void driveStraight(int distance_mm) {
-    float stepsPerMM = (STEPS_PER_REV * MICROSTEPS) / 220.0;
-    long targetSteps = distance_mm * stepsPerMM;
-    
-    motorLeft.setCurrentPosition(0);
-    motorRight.setCurrentPosition(0);
-    
-    motorLeft.moveTo(targetSteps);
-    motorRight.moveTo(targetSteps);
-    
-    while (motorLeft.distanceToGo() != 0 || motorRight.distanceToGo() != 0) {
-        motorLeft.run();
-        motorRight.run();
-    }
-    
-    stopMotors();
 }

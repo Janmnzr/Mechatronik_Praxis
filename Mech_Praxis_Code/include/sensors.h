@@ -29,7 +29,6 @@ bool hasGreenMarker();          // Grün irgendwo
 int getGreenSensorCount(bool left);  // Zählt grüne Sensoren
 
 // NEU: Verbesserte Linienverlust-Erkennung
-bool isLineLost();              // Linie komplett verloren?
 int getMiddleSensorCount();     // Zählt mittlere Sensoren (3,4,5)
 
 // Debug

@@ -159,10 +159,6 @@ bool is90DegreeCurve() {
     return isCurve;
 }
 
-bool isLineLost() {
-    return (getActiveSensorCount() < 2);
-}
-
 int getGreenSensorCount(bool left) {
     readLinePosition();
     int count = 0;

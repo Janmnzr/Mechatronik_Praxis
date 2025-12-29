@@ -2,7 +2,6 @@
 #include "config.h"
 #include "sensors.h"
 #include "motors.h"
-#include "bluetooth.h"
 #include <TimerOne.h>
 
 // ===== PID-Variablen =====
@@ -46,28 +45,28 @@ void motorISR();
 
 void printBoth(String message) {
     Serial.print(message);
-    bt.print(message);
+    Serial1.print(message);
 }
 
 void printBoth(float value, int decimals = 2) {
     Serial.print(value, decimals);
-    bt.print(String(value, decimals));
+    Serial1.print(value, decimals);
 }
 
 void printlnBoth(String message = "") {
     Serial.println(message);
-    bt.println(message);
+    Serial1.println(message);
 }
 
 void printlnBoth(float value, int decimals = 2) {
     Serial.println(value, decimals);
-    bt.println(String(value, decimals));
+    Serial1.println(value, decimals);
 }
 
 void setup() {
     Serial.begin(115200);
-    
-    bt.init();
+
+    Serial1.begin(9600);
     delay(100);
 
     printlnBoth("\n\n========================================");
@@ -78,11 +77,9 @@ void setup() {
     initSensors();
     initMotors();
     
-    Timer1.initialize(50); 
+    Timer1.initialize(50);
     Timer1.attachInterrupt(motorISR);
-    
-    bt.sendMenu();
-    
+
     printlnBoth("\nInitialisierung abgeschlossen!");
     printlnBoth("Microstepping: FEST auf 1/8 Step");
     printlnBoth("Gruen-Gedaechtnis: " + String(GREEN_MEMORY_TIME) + " ms");
@@ -141,8 +138,9 @@ void checkInputSources() {
         cmd = Serial.read();
         while(Serial.available() > 0) Serial.read();
     }
-    else if (bt.isAvailable()) {
-        cmd = bt.readCommand();
+    else if (Serial1.available() > 0) {
+        cmd = Serial1.read();
+        while(Serial1.available() > 0) Serial1.read();
     }
 
     if (cmd != 0) {
@@ -204,46 +202,15 @@ void executeCommand(char cmd) {
             }
             break;
             
-        case 'k':
-        case 'K':
-            printlnBoth("\n>>> ERKENNUNGS-TEST <<<");
-            printCrossingDebug();
-            printGreenDebug();
-            break;
-            
-        case 'g':
-        case 'G':
-            printlnBoth("\n>>> GRUEN-TEST <<<");
-            printGreenDebug();
-            break;
-            
-        case 'm':
-        case 'M':
-            printMotorStatus();
-            break;
-            
         case 'i':
         case 'I':
             printStatus();
-            break;
-            
-        case 'e':
-        case 'E':
-            printlnBoth("Motoren aktiviert");
-            enableMotors();
-            break;
-            
-        case 'r':
-        case 'R':
-            printlnBoth("Motoren deaktiviert");
-            disableMotors();
             break;
             
         case 'h':
         case 'H':
         case '?':
             printHelp();
-            bt.sendMenu();
             break;
 
         case 'l':
@@ -274,32 +241,6 @@ void executeCommand(char cmd) {
         case 'F':
             printlnBoth("\n>>> Test: Vorwaerts fahren <<<");
             driveForward(500);
-            break;
-            
-        case 't':
-        case 'T':
-            printlnBoth("\n>>> Analog-Pin Raw-Test <<<");
-            for(int i = 0; i < 8; i++) {
-                printlnBoth("A" + String(i) + ": " + String(analogRead(A0 + i)));
-            }
-            printlnBoth();
-            break;
-            
-        case 'p':
-        case 'P':
-            printlnBoth("\n>>> PID Live-Test (10 Messungen) <<<");
-            for (int i = 0; i < 10; i++) {
-                int pos = readLinePosition();
-                float err = pos - 3500.0;
-                
-                String pidMsg = "Pos: " + String(pos) + 
-                               " | Err: " + String((int)err) + 
-                               " | Corr: " + String(err * KP, 1);
-                printlnBoth(pidMsg);
-                
-                delay(300);
-            }
-            printlnBoth(">>> PID Test beendet <<<\n");
             break;
             
         default:
@@ -478,14 +419,8 @@ void printHelp() {
     printlnBoth("s - Start Linienfolger");
     printlnBoth("x - Stopp");
     printlnBoth("d - Debug-Modus (Sensorwerte + Erkennung live)");
-    printlnBoth();
-    printlnBoth("=== TESTS ===");
-    printlnBoth("k - Erkennungs-Test (Kreuzung + Gruen)");
-    printlnBoth("g - Gruen-Test (detailliert)");
-    printlnBoth("t - Analog-Pin Raw-Test");
-    printlnBoth("p - PID Live-Test");
-    printlnBoth("m - Motor-Status");
     printlnBoth("i - System-Status");
+    printlnBoth("h - Hilfe");
     printlnBoth();
     printlnBoth("=== MANOEVER-TESTS ===");
     printlnBoth("l - Links SCHARF (T-Kreuzung)");
@@ -493,10 +428,6 @@ void printHelp() {
     printlnBoth("u - Rechts SCHARF (T-Kreuzung)");
     printlnBoth("o - Rechts SANFT (90° Kurve)");
     printlnBoth("f - Vorwaerts fahren");
-    printlnBoth();
-    printlnBoth("e - Motoren aktivieren");
-    printlnBoth("r - Motoren deaktivieren");
-    printlnBoth("h - Hilfe");
     printlnBoth();
     printlnBoth("Microstepping: FEST auf 1/8 Step");
     printlnBoth("Gruen-Gedaechtnis: " + String(GREEN_MEMORY_TIME) + " ms");
