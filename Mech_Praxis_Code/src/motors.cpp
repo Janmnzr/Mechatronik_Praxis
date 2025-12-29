@@ -128,11 +128,12 @@ void printMotorStatus() {
 void driveForward(unsigned long duration_ms) {
     unsigned long startTime = millis();
     setMotorSpeeds(BASE_SPEED, BASE_SPEED);
-    
+
     while (millis() - startTime < duration_ms) {
-        // Warten
+        motorLeft.runSpeed();
+        motorRight.runSpeed();
     }
-    
+
     stopMotors();
 }
 
@@ -141,39 +142,41 @@ void driveForward(unsigned long duration_ms) {
 void turnLeftSharp() {
     // SCHARFE 90° Links-Drehung (für T-Kreuzung)
     Serial.println(">>> LINKS ABBIEGEN (SCHARF) <<<");
-    
+
     driveForward(150);  // Kurz vorfahren
     delay(50);
-    
+
     // Spot-Turn: Ein Motor rückwärts, einer vorwärts
     unsigned long startTime = millis();
     setMotorSpeeds(-TURN_SPEED, TURN_SPEED);
-    
+
     while (millis() - startTime < SHARP_TURN_DURATION) {
-        // Warten
+        motorLeft.runSpeed();
+        motorRight.runSpeed();
     }
-    
+
     stopMotors();
     delay(100);
-    
+
     Serial.println("Scharfe Links-Kurve abgeschlossen");
 }
 
 void turnLeftSmooth() {
     // SANFTE 90° Links-Kurve (für normale 90° Bögen)
     Serial.println(">>> LINKS KURVE (SANFT) <<<");
-    
+
     // Langsamer fahren, links langsamer als rechts
     unsigned long startTime = millis();
     setMotorSpeeds(CURVE_SPEED * 0.3, CURVE_SPEED);  // Links 30%, rechts 100%
-    
+
     while (millis() - startTime < SMOOTH_CURVE_DURATION) {
-        // Warten
+        motorLeft.runSpeed();
+        motorRight.runSpeed();
     }
-    
+
     stopMotors();
     delay(100);
-    
+
     Serial.println("Sanfte Links-Kurve abgeschlossen");
 }
 
@@ -182,36 +185,38 @@ void turnLeftSmooth() {
 void turnRightSharp() {
     // SCHARFE 90° Rechts-Drehung (für T-Kreuzung)
     Serial.println(">>> RECHTS ABBIEGEN (SCHARF) <<<");
-    
+
     driveForward(150);
     delay(50);
-    
+
     unsigned long startTime = millis();
     setMotorSpeeds(TURN_SPEED, -TURN_SPEED);
-    
+
     while (millis() - startTime < SHARP_TURN_DURATION) {
-        // Warten
+        motorLeft.runSpeed();
+        motorRight.runSpeed();
     }
-    
+
     stopMotors();
     delay(100);
-    
+
     Serial.println("Scharfe Rechts-Kurve abgeschlossen");
 }
 
 void turnRightSmooth() {
     // SANFTE 90° Rechts-Kurve (für normale 90° Bögen)
     Serial.println(">>> RECHTS KURVE (SANFT) <<<");
-    
+
     unsigned long startTime = millis();
     setMotorSpeeds(CURVE_SPEED, CURVE_SPEED * 0.3);  // Links 100%, rechts 30%
-    
+
     while (millis() - startTime < SMOOTH_CURVE_DURATION) {
-        // Warten
+        motorLeft.runSpeed();
+        motorRight.runSpeed();
     }
-    
+
     stopMotors();
     delay(100);
-    
+
     Serial.println("Sanfte Rechts-Kurve abgeschlossen");
 }
