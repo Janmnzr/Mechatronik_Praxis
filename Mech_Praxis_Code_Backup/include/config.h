@@ -28,9 +28,9 @@
 #define QTR_IR_PIN   44
 
 // ===== LINIEN-ERKENNUNG =====
-#define LINE_THRESHOLD   700
-#define GREEN_MIN        70
-#define GREEN_MAX        350
+#define LINE_THRESHOLD   750
+#define GREEN_MIN        300
+#define GREEN_MAX        750
 #define GREEN_SENSOR_COUNT 2
 #define CROSSING_THRESHOLD 6
 #define CURVE_THRESHOLD    3
@@ -46,8 +46,8 @@
 #define TURN_SPEED       400
 #define ACCELERATION     1000
 #define CURVE_SPEED      350
-#define SHARP_TURN_DURATION 1200
-#define SMOOTH_CURVE_DURATION 800
+#define SHARP_TURN_DURATION 1300
+#define SMOOTH_CURVE_DURATION 850
 
 // ===== PID =====
 #define KP  0.4

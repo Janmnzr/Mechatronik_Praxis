@@ -17,7 +17,8 @@ enum Mode {
     CALIBRATION,
     RUNNING,
     STOPPED,
-    DEBUG
+    DEBUG,
+    MANEUVERING  // Neuer Mode für Manöver (ISR läuft weiter, aber keine PID-Regelung)
 };
 
 Mode currentMode = STOPPED;
@@ -35,6 +36,11 @@ enum TurnState {
 };
 
 TurnState turnState = NO_TURN;
+
+// ===== Linienverlust-Tracking =====
+int lineLostCounter = 0;
+#define LINE_LOST_THRESHOLD 10  // 10 Durchgänge ohne Linie tolerieren
+int lastLinePosition = 3500;     // Letzte bekannte Position (Mitte)
 
 // ===== Funktions-Deklarationen =====
 void followLine();
@@ -71,11 +77,11 @@ void setup() {
     Serial1.begin(9600);
     delay(100);
 
-    printlnBoth("\n\n========================================");
-    printlnBoth("  LINIENFOLGER - VERBESSERTE VERSION");
-    printlnBoth("  Robuste Abbiegeerkennung");
-    printlnBoth("  MIT LCD MENU");
-    printlnBoth("========================================\n");
+    // printlnBoth("\n\n========================================");
+    // printlnBoth("  LINIENFOLGER - VERBESSERTE VERSION");
+    // printlnBoth("  Robuste Abbiegeerkennung");
+    // printlnBoth("  MIT LCD MENU");
+    // printlnBoth("========================================\n");
 
     // LCD initialisieren
     initLCD();
@@ -86,12 +92,12 @@ void setup() {
     Timer1.initialize(50);
     Timer1.attachInterrupt(motorISR);
 
-    printlnBoth("\nInitialisierung abgeschlossen!");
-    printlnBoth("Microstepping: FEST auf 1/8 Step");
-    printlnBoth("Gruen-Gedaechtnis: " + String(GREEN_MEMORY_TIME) + " ms");
-    printlnBoth("T-Kreuzung Schwelle: " + String(CROSSING_THRESHOLD) + " Sensoren");
-    printlnBoth("90° Kurven Schwelle: " + String(CURVE_THRESHOLD) + " Sensoren");
-    printHelp();
+    // printlnBoth("\nInitialisierung abgeschlossen!");
+    // printlnBoth("Microstepping: FEST auf 1/8 Step");
+    // printlnBoth("Gruen-Gedaechtnis: " + String(GREEN_MEMORY_TIME) + " ms");
+    // printlnBoth("T-Kreuzung Schwelle: " + String(CROSSING_THRESHOLD) + " Sensoren");
+    // printlnBoth("90° Kurven Schwelle: " + String(CURVE_THRESHOLD) + " Sensoren");
+    // printHelp();
 
     currentMode = STOPPED;
     displayStatus("System bereit", "Taste druecken");
@@ -103,20 +109,28 @@ void loop() {
         handleMenu();
     }
 
-    // NOTFALL-ABBRUCH: LEFT-Taste prüfen (auch während RUNNING/DEBUG/SENSOR_DEBUG)
+    // NOTFALL-ABBRUCH: LEFT-Taste prüfen (Throttled auf 50ms)
     if (currentMode == RUNNING || currentMode == DEBUG) {
-        extern Button readButton();
-        Button emergencyBtn = readButton();
-        if (emergencyBtn == BTN_LEFT) {
-            printlnBoth("\n>>> ABBRUCH durch LEFT-Taste <<<");
-            displayStatus("ABBRUCH", "Stoppe...");
-            currentMode = STOPPED;
-            stopMotors();
-            greenDetected = false;
-            turnDirection = 0;
-            turnState = NO_TURN;
-            delay(1000);
-            displayMenu();
+        static unsigned long lastButtonCheck = 0;
+
+        // Nur alle 50ms prüfen (statt bei jedem Durchgang)
+        if (millis() - lastButtonCheck > 50) {
+            lastButtonCheck = millis();
+
+            extern Button readButton();
+            Button emergencyBtn = readButton();
+            if (emergencyBtn == BTN_LEFT) {
+                // printlnBoth("\n>>> ABBRUCH durch LEFT-Taste <<<");
+                displayStatus("ABBRUCH", "Stoppe...");
+                currentMode = STOPPED;
+                stopMotors();
+                greenDetected = false;
+                turnDirection = 0;
+                turnState = NO_TURN;
+                lineLostCounter = 0;  // Reset Counter
+                delay(1000);
+                displayMenu();
+            }
         }
     }
 
@@ -153,22 +167,22 @@ void loop() {
                 if (millis() - lastDebugPrint > 500) {
                     extern uint16_t sensorValues[NUM_SENSORS];
 
-                    Serial.print("RAW: ");
-                    for (uint8_t i = 0; i < NUM_SENSORS; i++) {
-                        Serial.print(sensorValues[i]);
-                        if (i < NUM_SENSORS - 1) Serial.print(" | ");
-                    }
-                    Serial.println();
+                    // Serial.print("RAW: ");
+                    // for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+                    //     Serial.print(sensorValues[i]);
+                    //     if (i < NUM_SENSORS - 1) Serial.print(" | ");
+                    // }
+                    // Serial.println();
 
-                    Serial.print("Pos: ");
-                    Serial.print(readLinePosition());
-                    Serial.print(" | Linie: ");
-                    Serial.print(isLineDetected() ? "JA" : "NEIN");
-                    Serial.print(" | T-X: ");
-                    Serial.print(isCrossing() ? "JA" : "NEIN");
-                    Serial.print(" | 90: ");
-                    Serial.println(is90DegreeCurve() ? "JA" : "NEIN");
-                    Serial.println();
+                    // Serial.print("Pos: ");
+                    // Serial.print(readLinePosition());
+                    // Serial.print(" | Linie: ");
+                    // Serial.print(isLineDetected() ? "JA" : "NEIN");
+                    // Serial.print(" | T-X: ");
+                    // Serial.print(isCrossing() ? "JA" : "NEIN");
+                    // Serial.print(" | 90: ");
+                    // Serial.println(is90DegreeCurve() ? "JA" : "NEIN");
+                    // Serial.println();
 
                     lastDebugPrint = millis();
                 }
@@ -232,25 +246,25 @@ void checkInputSources() {
 }
 
 void executeCommand(char cmd) {
-    String feedback = "CMD: ";
-    feedback += cmd;
-    printlnBoth(feedback); 
+    // String feedback = "CMD: ";
+    // feedback += cmd;
+    // printlnBoth(feedback); 
 
     switch(cmd) {
         case 'c':
         case 'C':
-            printlnBoth("\n>>> KALIBRIERUNGS-MODUS <<<");
-            printlnBoth("WICHTIG: Auch ueber GRUENE QUADRATE fahren!");
+            // printlnBoth("\n>>> KALIBRIERUNGS-MODUS <<<");
+            // printlnBoth("WICHTIG: Auch ueber GRUENE QUADRATE fahren!");
             currentMode = CALIBRATION;
             stopMotors();
             calibrateSensors();
             currentMode = STOPPED;
-            printlnBoth("\nKalibrierung abgeschlossen. Druecke 's' zum Starten.");
+            // printlnBoth("\nKalibrierung abgeschlossen. Druecke 's' zum Starten.");
             break;
             
         case 's':
         case 'S':
-            printlnBoth("\n>>> START - Linienfolger aktiv <<<");
+            // printlnBoth("\n>>> START - Linienfolger aktiv <<<");
             currentMode = RUNNING;
             lastError = 0;
             integral = 0;
@@ -265,70 +279,70 @@ void executeCommand(char cmd) {
         case 'x':
         case 'X':
         case ' ':
-            printlnBoth("\n>>> STOPP <<<");
+            // printlnBoth("\n>>> STOPP <<<");
             currentMode = STOPPED;
             stopMotors();
             greenDetected = false;
             turnDirection = 0;
             turnState = NO_TURN;
-            printHelp();
+            // printHelp();
             break;
             
         case 'd':
         case 'D':
             if (currentMode == DEBUG) {
-                printlnBoth("\n>>> Debug-Modus BEENDET <<<");
+                // printlnBoth("\n>>> Debug-Modus BEENDET <<<");
                 currentMode = STOPPED;
             } else {
-                printlnBoth("\n>>> DEBUG-MODUS <<<");
-                printlnBoth("Zeigt Sensorwerte + Erkennungen live...");
+                // printlnBoth("\n>>> DEBUG-MODUS <<<");
+                // printlnBoth("Zeigt Sensorwerte + Erkennungen live...");
                 currentMode = DEBUG;
             }
             break;
-            
+
         case 'i':
         case 'I':
-            printStatus();
+            // printStatus();
             break;
-            
+
         case 'h':
         case 'H':
         case '?':
-            printHelp();
+            // printHelp();
             break;
 
         case 'l':
         case 'L':
-            printlnBoth("\n>>> Test: Links SCHARF <<<");
+            // printlnBoth("\n>>> Test: Links SCHARF <<<");
             turnLeftSharp();
             break;
-            
+
         case 'n':
         case 'N':
-            printlnBoth("\n>>> Test: Links SANFT <<<");
+            // printlnBoth("\n>>> Test: Links SANFT <<<");
             turnLeftSmooth();
             break;
-            
+
         case 'u':
         case 'U':
-            printlnBoth("\n>>> Test: Rechts SCHARF <<<");
+            // printlnBoth("\n>>> Test: Rechts SCHARF <<<");
             turnRightSharp();
             break;
-            
+
         case 'o':
         case 'O':
-            printlnBoth("\n>>> Test: Rechts SANFT <<<");
+            // printlnBoth("\n>>> Test: Rechts SANFT <<<");
             turnRightSmooth();
             break;
 
         case 'f':
         case 'F':
-            printlnBoth("\n>>> Test: Vorwaerts fahren <<<");
+            // printlnBoth("\n>>> Test: Vorwaerts fahren <<<");
             driveForward(500);
             break;
-            
+
         default:
-            printlnBoth("Unbekannter Befehl. Druecke 'h' fuer Hilfe.");
+            // printlnBoth("Unbekannter Befehl. Druecke 'h' fuer Hilfe.");
             break;
     }
 }
@@ -346,17 +360,17 @@ void followLine() {
         
         if (hasGreenMarkerLeft()) {
             turnDirection = -1;
-            printlnBoth("\n!!! GRUEN LINKS ERKANNT !!!");
-            printlnBoth("Bereit zum Linksabbiegen bei naechster Kreuzung/Kurve");
+            // printlnBoth("\n!!! GRUEN LINKS ERKANNT !!!");
+            // printlnBoth("Bereit zum Linksabbiegen bei naechster Kreuzung/Kurve");
             #if DEBUG_GREEN
-            printGreenDebug();
+            // printGreenDebug();
             #endif
         } else if (hasGreenMarkerRight()) {
             turnDirection = 1;
-            printlnBoth("\n!!! GRUEN RECHTS ERKANNT !!!");
-            printlnBoth("Bereit zum Rechtsabbiegen bei naechster Kreuzung/Kurve");
+            // printlnBoth("\n!!! GRUEN RECHTS ERKANNT !!!");
+            // printlnBoth("Bereit zum Rechtsabbiegen bei naechster Kreuzung/Kurve");
             #if DEBUG_GREEN
-            printGreenDebug();
+            // printGreenDebug();
             #endif
         }
     }
@@ -370,32 +384,40 @@ void followLine() {
         bool is90Curve = is90DegreeCurve();
         
         if (isTCrossing || is90Curve) {
-            printlnBoth("\n!!! ABBIEGEPUNKT ERREICHT !!!");
-            printCrossingDebug();
-            
+            // printlnBoth("\n!!! ABBIEGEPUNKT ERREICHT !!!");
+            // printCrossingDebug();
+
             lastTurnTime = currentTime;
             turnState = TURNING;
-            
+
             if (turnDirection == -1) {
                 // Links abbiegen
                 if (isTCrossing) {
-                    printlnBoth(">>> T-KREUZUNG: LINKS SCHARF <<<");
+                    // printlnBoth(">>> T-KREUZUNG: LINKS SCHARF <<<");
+                    currentMode = MANEUVERING;  // ISR läuft weiter, keine PID
                     turnLeftSharp();
+                    currentMode = RUNNING;  // Zurück zu PID-Regelung
                 } else {
-                    printlnBoth(">>> 90° KURVE: LINKS SANFT <<<");
+                    // printlnBoth(">>> 90° KURVE: LINKS SANFT <<<");
+                    currentMode = MANEUVERING;
                     turnLeftSmooth();
+                    currentMode = RUNNING;
                 }
             } else if (turnDirection == 1) {
                 // Rechts abbiegen
                 if (isTCrossing) {
-                    printlnBoth(">>> T-KREUZUNG: RECHTS SCHARF <<<");
+                    // printlnBoth(">>> T-KREUZUNG: RECHTS SCHARF <<<");
+                    currentMode = MANEUVERING;
                     turnRightSharp();
+                    currentMode = RUNNING;
                 } else {
-                    printlnBoth(">>> 90° KURVE: RECHTS SANFT <<<");
+                    // printlnBoth(">>> 90° KURVE: RECHTS SANFT <<<");
+                    currentMode = MANEUVERING;
                     turnRightSmooth();
+                    currentMode = RUNNING;
                 }
             }
-            
+
             // Reset nach Abbiegung
             greenDetected = false;
             turnDirection = 0;
@@ -403,28 +425,62 @@ void followLine() {
             lastError = 0;
             integral = 0;
             lastTime = millis();
-            
-            printlnBoth("Abbiegung abgeschlossen - Zurueck zur Linie\n");
+
+            // printlnBoth("Abbiegung abgeschlossen - Zurueck zur Linie\n");
             return;
         }
     }
     
     // ==== SCHRITT 4: Grün-Gedächtnis Timeout ====
     if (greenDetected && (currentTime - greenDetectionTime) > GREEN_MEMORY_TIME) {
-        printlnBoth("\n[Gruen-Gedaechtnis abgelaufen - keine Kreuzung gefunden]");
+        // printlnBoth("\n[Gruen-Gedaechtnis abgelaufen - keine Kreuzung gefunden]");
         greenDetected = false;
         turnDirection = 0;
         turnState = NO_TURN;
     }
     
-    // ==== SCHRITT 5: Linienverlust prüfen ====
+    // ==== SCHRITT 5: Linienverlust prüfen mit Zähler & Such-Routine ====
     if (!isLineDetected()) {
-        printlnBoth("WARNUNG: Linie verloren!");
-        stopMotors();
-        delay(100);
+        lineLostCounter++;
+
+        if (lineLostCounter >= LINE_LOST_THRESHOLD) {
+            // Schwellenwert erreicht: Linie aktiv suchen
+            // printlnBoth("WARNUNG: Linie verloren! Suche...");
+
+            // In Richtung der letzten Position suchen
+            int searchDirection = (lastLinePosition < 3500) ? -1 : 1;  // -1=links, 1=rechts
+
+            // printBoth("Suche ");
+            // printlnBoth(searchDirection == -1 ? "LINKS" : "RECHTS");
+
+            // Langsame Drehung in Such-Richtung (max 1 Sekunde)
+            unsigned long searchStart = millis();
+            setMotorSpeeds(searchDirection * 150, -searchDirection * 150);
+
+            while (millis() - searchStart < 1000) {
+                readLinePosition();  // Sensoren aktualisieren
+                if (isLineDetected()) {
+                    // printlnBoth(">>> Linie GEFUNDEN! <<<");
+                    lineLostCounter = 0;
+                    return;  // Erfolgreich gefunden, PID übernimmt
+                }
+            }
+
+            // Nach 1s nicht gefunden: Stoppen
+            // printlnBoth("Linie nicht gefunden - STOPP");
+            stopMotors();
+            lineLostCounter = 0;
+            return;
+        }
+
+        // Noch innerhalb Toleranz: Weitermachen ohne Panik
         return;
+    } else {
+        // Linie gefunden: Counter reset & Position merken
+        lineLostCounter = 0;
+        lastLinePosition = position;
     }
-    
+
     // ==== SCHRITT 6: Normale PID-Linienfolger ====
     float error = position - 3500.0;
     
@@ -463,110 +519,110 @@ void followLine() {
     
     // ==== SCHRITT 7: Debug-Ausgabe ====
     #if DEBUG_SERIAL
-    static unsigned long lastPrint = 0;
-    if (millis() - lastPrint > DEBUG_INTERVAL) {
-        printBoth("Pos:");
-        printBoth(String(position));
-        printBoth(" E:");
-        printBoth(String((int)error));
-        printBoth(" C:");
-        printBoth(String((int)correction));
-        printBoth(" L:");
-        printBoth(String((int)leftSpeed));
-        printBoth(" R:");
-        printBoth(String((int)rightSpeed));
-        
-        if (greenDetected) {
-            printBoth(" [G:");
-            printBoth(turnDirection == -1 ? "L" : "R");
-            unsigned long timeLeft = GREEN_MEMORY_TIME - (currentTime - greenDetectionTime);
-            printBoth(" ");
-            printBoth(String(timeLeft/1000));
-            printBoth("s]");
-        }
-        
-        if (isCrossing()) {
-            printBoth(" [T-X]");
-        } else if (is90DegreeCurve()) {
-            printBoth(" [90°]");
-        }
-        
-        printlnBoth();
-        lastPrint = millis();
-    }
+    // static unsigned long lastPrint = 0;
+    // if (millis() - lastPrint > DEBUG_INTERVAL) {
+    //     printBoth("Pos:");
+    //     printBoth(String(position));
+    //     printBoth(" E:");
+    //     printBoth(String((int)error));
+    //     printBoth(" C:");
+    //     printBoth(String((int)correction));
+    //     printBoth(" L:");
+    //     printBoth(String((int)leftSpeed));
+    //     printBoth(" R:");
+    //     printBoth(String((int)rightSpeed));
+    //
+    //     if (greenDetected) {
+    //         printBoth(" [G:");
+    //         printBoth(turnDirection == -1 ? "L" : "R");
+    //         unsigned long timeLeft = GREEN_MEMORY_TIME - (currentTime - greenDetectionTime);
+    //         printBoth(" ");
+    //         printBoth(String(timeLeft/1000));
+    //         printBoth("s]");
+    //     }
+    //
+    //     if (isCrossing()) {
+    //         printBoth(" [T-X]");
+    //     } else if (is90DegreeCurve()) {
+    //         printBoth(" [90°]");
+    //     }
+    //
+    //     printlnBoth();
+    //     lastPrint = millis();
+    // }
     #endif
 }
 
 void printHelp() {
-    printlnBoth("\n=== STEUERUNG ===");
-    printlnBoth("c - Kalibrierung (WICHTIG: auch ueber Gruen!)");
-    printlnBoth("s - Start Linienfolger");
-    printlnBoth("x - Stopp");
-    printlnBoth("d - Debug-Modus (Sensorwerte + Erkennung live)");
-    printlnBoth("i - System-Status");
-    printlnBoth("h - Hilfe");
-    printlnBoth();
-    printlnBoth("=== MANOEVER-TESTS ===");
-    printlnBoth("l - Links SCHARF (T-Kreuzung)");
-    printlnBoth("n - Links SANFT (90° Kurve)");
-    printlnBoth("u - Rechts SCHARF (T-Kreuzung)");
-    printlnBoth("o - Rechts SANFT (90° Kurve)");
-    printlnBoth("f - Vorwaerts fahren");
-    printlnBoth();
-    printlnBoth("Microstepping: FEST auf 1/8 Step");
-    printlnBoth("Gruen-Gedaechtnis: " + String(GREEN_MEMORY_TIME) + " ms");
-    printlnBoth();
+    // printlnBoth("\n=== STEUERUNG ===");
+    // printlnBoth("c - Kalibrierung (WICHTIG: auch ueber Gruen!)");
+    // printlnBoth("s - Start Linienfolger");
+    // printlnBoth("x - Stopp");
+    // printlnBoth("d - Debug-Modus (Sensorwerte + Erkennung live)");
+    // printlnBoth("i - System-Status");
+    // printlnBoth("h - Hilfe");
+    // printlnBoth();
+    // printlnBoth("=== MANOEVER-TESTS ===");
+    // printlnBoth("l - Links SCHARF (T-Kreuzung)");
+    // printlnBoth("n - Links SANFT (90° Kurve)");
+    // printlnBoth("u - Rechts SCHARF (T-Kreuzung)");
+    // printlnBoth("o - Rechts SANFT (90° Kurve)");
+    // printlnBoth("f - Vorwaerts fahren");
+    // printlnBoth();
+    // printlnBoth("Microstepping: FEST auf 1/8 Step");
+    // printlnBoth("Gruen-Gedaechtnis: " + String(GREEN_MEMORY_TIME) + " ms");
+    // printlnBoth();
 }
 
 void printStatus() {
-    printlnBoth("\n=== SYSTEM STATUS ===");
-    
-    printBoth("Modus: ");
-    switch(currentMode) {
-        case CALIBRATION: printlnBoth("KALIBRIERUNG"); break;
-        case RUNNING: printlnBoth("RUNNING"); break;
-        case STOPPED: printlnBoth("GESTOPPT"); break;
-        case DEBUG: printlnBoth("DEBUG"); break;
-    }
-    
-    printBoth("Sensoren: ");
-    printlnBoth(String(NUM_SENSORS) + " Stueck");
-    
-    int pos = readLinePosition();
-    printBoth("Position: ");
-    printBoth(String(pos));
-    printlnBoth(" (Linie: " + String(isLineDetected() ? "JA" : "NEIN") + ")");
-    
-    printlnBoth("\nErkennung:");
-    printlnBoth("  T-Kreuzung (>=" + String(CROSSING_THRESHOLD) + "): " + 
-                String(isCrossing() ? "JA" : "NEIN"));
-    printlnBoth("  90° Kurve (>=" + String(CURVE_THRESHOLD) + "): " + 
-                String(is90DegreeCurve() ? "JA" : "NEIN"));
-    printlnBoth("  Gruen Links: " + String(hasGreenMarkerLeft() ? "JA" : "NEIN"));
-    printlnBoth("  Gruen Rechts: " + String(hasGreenMarkerRight() ? "JA" : "NEIN"));
-    
-    if (greenDetected) {
-        unsigned long timeLeft = GREEN_MEMORY_TIME - (millis() - greenDetectionTime);
-        printlnBoth("\n  >>> GRUEN AKTIV: " + String(turnDirection == -1 ? "LINKS" : "RECHTS"));
-        printlnBoth("  >>> Zeit verbleibend: " + String(timeLeft/1000) + " Sekunden");
-    }
-    
-    
-    printlnBoth("\nMotor-Konfiguration:");
-    printlnBoth("  Microstepping: FEST 1/" + String(MICROSTEPS));
-    printlnBoth("  Max Speed: " + String(MAX_SPEED) + " steps/s");
-    printlnBoth("  Base Speed: " + String(BASE_SPEED) + " steps/s");
-    
-    printlnBoth("\nPID-Parameter:");
-    printlnBoth("  KP: " + String(KP, 3));
-    printlnBoth("  KD: " + String(KD, 3));
-    printlnBoth("  Deadzone: " + String(ERROR_DEADZONE));
-    
-    printlnBoth("\n====================\n");
+    // printlnBoth("\n=== SYSTEM STATUS ===");
+    //
+    // printBoth("Modus: ");
+    // switch(currentMode) {
+    //     case CALIBRATION: printlnBoth("KALIBRIERUNG"); break;
+    //     case RUNNING: printlnBoth("RUNNING"); break;
+    //     case STOPPED: printlnBoth("GESTOPPT"); break;
+    //     case DEBUG: printlnBoth("DEBUG"); break;
+    // }
+    //
+    // printBoth("Sensoren: ");
+    // printlnBoth(String(NUM_SENSORS) + " Stueck");
+    //
+    // int pos = readLinePosition();
+    // printBoth("Position: ");
+    // printBoth(String(pos));
+    // printlnBoth(" (Linie: " + String(isLineDetected() ? "JA" : "NEIN") + ")");
+    //
+    // printlnBoth("\nErkennung:");
+    // printlnBoth("  T-Kreuzung (>=" + String(CROSSING_THRESHOLD) + "): " +
+    //             String(isCrossing() ? "JA" : "NEIN"));
+    // printlnBoth("  90° Kurve (>=" + String(CURVE_THRESHOLD) + "): " +
+    //             String(is90DegreeCurve() ? "JA" : "NEIN"));
+    // printlnBoth("  Gruen Links: " + String(hasGreenMarkerLeft() ? "JA" : "NEIN"));
+    // printlnBoth("  Gruen Rechts: " + String(hasGreenMarkerRight() ? "JA" : "NEIN"));
+    //
+    // if (greenDetected) {
+    //     unsigned long timeLeft = GREEN_MEMORY_TIME - (millis() - greenDetectionTime);
+    //     printlnBoth("\n  >>> GRUEN AKTIV: " + String(turnDirection == -1 ? "LINKS" : "RECHTS"));
+    //     printlnBoth("  >>> Zeit verbleibend: " + String(timeLeft/1000) + " Sekunden");
+    // }
+    //
+    //
+    // printlnBoth("\nMotor-Konfiguration:");
+    // printlnBoth("  Microstepping: FEST 1/" + String(MICROSTEPS));
+    // printlnBoth("  Max Speed: " + String(MAX_SPEED) + " steps/s");
+    // printlnBoth("  Base Speed: " + String(BASE_SPEED) + " steps/s");
+    //
+    // printlnBoth("\nPID-Parameter:");
+    // printlnBoth("  KP: " + String(KP, 3));
+    // printlnBoth("  KD: " + String(KD, 3));
+    // printlnBoth("  Deadzone: " + String(ERROR_DEADZONE));
+    //
+    // printlnBoth("\n====================\n");
 }
 
 void motorISR() {
-    if (currentMode == RUNNING || currentMode == CALIBRATION) {
+    if (currentMode == RUNNING || currentMode == CALIBRATION || currentMode == MANEUVERING) {
         motorLeft.runSpeed();
         motorRight.runSpeed();
     }
@@ -577,23 +633,23 @@ void executeMenuCommand(MenuItem item) {
     switch(item) {
         case MENU_KALIBRIERUNG:
             displayStatus("KALIBRIERUNG", "Starte...");
-            printlnBoth("\n>>> KALIBRIERUNGS-MODUS <<<");
-            printlnBoth("WICHTIG: Auch ueber GRUENE QUADRATE fahren!");
+            // printlnBoth("\n>>> KALIBRIERUNGS-MODUS <<<");
+            // printlnBoth("WICHTIG: Auch ueber GRUENE QUADRATE fahren!");
             currentMode = CALIBRATION;
             stopMotors();
             delay(1000);
             calibrateSensors();
             currentMode = STOPPED;
             displayStatus("Kalibrierung", "Abgeschlossen!");
-            printlnBoth("\nKalibrierung abgeschlossen.");
+            // printlnBoth("\nKalibrierung abgeschlossen.");
             delay(2000);
             displayMenu();
             break;
 
         case MENU_LINIENFOLGER_START:
             displayStatus("LINIENFOLGER", "START...");
-            printlnBoth("\n>>> START - Linienfolger aktiv <<<");
-            printlnBoth("(LEFT-Taste zum Abbrechen)");
+            // printlnBoth("\n>>> START - Linienfolger aktiv <<<");
+            // printlnBoth("(LEFT-Taste zum Abbrechen)");
             currentMode = RUNNING;
             lastError = 0;
             integral = 0;
@@ -614,30 +670,30 @@ void executeMenuCommand(MenuItem item) {
         case MENU_SENSOR_DEBUG:
             if (currentMode == DEBUG) {
                 displayStatus("Sensor Debug", "BEENDET");
-                printlnBoth("\n>>> Sensor Debug BEENDET <<<");
+                // printlnBoth("\n>>> Sensor Debug BEENDET <<<");
                 currentMode = STOPPED;
                 delay(1000);
                 displayMenu();
             } else {
                 displayStatus("SENSOR DEBUG", "Aktiv...");
-                printlnBoth("\n>>> SENSOR DEBUG <<<");
-                printlnBoth("LCD: Werte 0-9 (skaliert)");
-                printlnBoth("Serial: Volle Werte (2x/s)");
-                printlnBoth("(LEFT-Taste zum Abbrechen)");
+                // printlnBoth("\n>>> SENSOR DEBUG <<<");
+                // printlnBoth("LCD: Werte 0-9 (skaliert)");
+                // printlnBoth("Serial: Volle Werte (2x/s)");
+                // printlnBoth("(LEFT-Taste zum Abbrechen)");
                 currentMode = DEBUG;
                 delay(1000);
             }
             break;
 
         case MENU_MOTOR_TEST:
-            printlnBoth("\n>>> MOTOR TEST <<<");
-            printlnBoth("Jeder Test dauert 3 Sekunden");
+            // printlnBoth("\n>>> MOTOR TEST <<<");
+            // printlnBoth("Jeder Test dauert 3 Sekunden");
             enableMotors();
             delay(500);
 
             // Test 1: Nur rechter Motor
             displayStatus("TEST 1/4", "Motor RECHTS");
-            printlnBoth("\nTest 1: Rechter Motor vorwaerts (3s)");
+            // printlnBoth("\nTest 1: Rechter Motor vorwaerts (3s)");
             setMotorSpeeds(0, 400);
             unsigned long start = millis();
             while (millis() - start < 3000) {
@@ -645,12 +701,12 @@ void executeMenuCommand(MenuItem item) {
                 motorRight.runSpeed();
             }
             stopMotors();
-            printlnBoth("  -> Test 1 abgeschlossen");
+            // printlnBoth("  -> Test 1 abgeschlossen");
             delay(1000);
 
             // Test 2: Nur linker Motor
             displayStatus("TEST 2/4", "Motor LINKS");
-            printlnBoth("\nTest 2: Linker Motor vorwaerts (3s)");
+            // printlnBoth("\nTest 2: Linker Motor vorwaerts (3s)");
             setMotorSpeeds(400, 0);
             start = millis();
             while (millis() - start < 3000) {
@@ -658,12 +714,12 @@ void executeMenuCommand(MenuItem item) {
                 motorRight.runSpeed();
             }
             stopMotors();
-            printlnBoth("  -> Test 2 abgeschlossen");
+            // printlnBoth("  -> Test 2 abgeschlossen");
             delay(1000);
 
             // Test 3: Beide vorwärts
             displayStatus("TEST 3/4", "BEIDE vorwaerts");
-            printlnBoth("\nTest 3: Beide Motoren vorwaerts (3s)");
+            // printlnBoth("\nTest 3: Beide Motoren vorwaerts (3s)");
             setMotorSpeeds(400, 400);
             start = millis();
             while (millis() - start < 3000) {
@@ -671,12 +727,12 @@ void executeMenuCommand(MenuItem item) {
                 motorRight.runSpeed();
             }
             stopMotors();
-            printlnBoth("  -> Test 3 abgeschlossen");
+            // printlnBoth("  -> Test 3 abgeschlossen");
             delay(1000);
 
             // Test 4: Drehung auf der Stelle
             displayStatus("TEST 4/4", "Drehung");
-            printlnBoth("\nTest 4: Drehung auf der Stelle (3s)");
+            // printlnBoth("\nTest 4: Drehung auf der Stelle (3s)");
             setMotorSpeeds(400, -400);
             start = millis();
             while (millis() - start < 3000) {
@@ -684,12 +740,12 @@ void executeMenuCommand(MenuItem item) {
                 motorRight.runSpeed();
             }
             stopMotors();
-            printlnBoth("  -> Test 4 abgeschlossen");
+            // printlnBoth("  -> Test 4 abgeschlossen");
             delay(1000);
 
             displayStatus("Motor Test", "Abgeschlossen!");
-            printlnBoth("\n>>> MOTOR TEST ABGESCHLOSSEN <<<");
-            printlnBoth("Alle 4 Tests durchgefuehrt\n");
+            // printlnBoth("\n>>> MOTOR TEST ABGESCHLOSSEN <<<");
+            // printlnBoth("Alle 4 Tests durchgefuehrt\n");
             delay(2000);
             displayMenu();
             break;

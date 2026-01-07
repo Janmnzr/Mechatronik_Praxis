@@ -69,14 +69,14 @@ Button readButton() {
     int adc_key_in = analogRead(LCD_BUTTONS_PIN);
 
     // DEBUG: Zeige rohe Werte auf Serial (zum Kalibrieren)
-    static unsigned long lastDebugPrint = 0;
-    static int lastValue = -1;
-    if (millis() - lastDebugPrint > 500 && abs(adc_key_in - lastValue) > 10) {
-        Serial.print("Button ADC Wert: ");
-        Serial.println(adc_key_in);
-        lastDebugPrint = millis();
-        lastValue = adc_key_in;
-    }
+    // static unsigned long lastDebugPrint = 0;
+    // static int lastValue = -1;
+    // if (millis() - lastDebugPrint > 500 && abs(adc_key_in - lastValue) > 10) {
+    //     Serial.print("Button ADC Wert: ");
+    //     Serial.println(adc_key_in);
+    //     lastDebugPrint = millis();
+    //     lastValue = adc_key_in;
+    // }
 
     // Entprellung
     if (millis() - lastButtonPress < DEBOUNCE_DELAY) {
@@ -90,27 +90,27 @@ Button readButton() {
 
     if (adc_key_in < 60) {
         lastButtonPress = millis();
-        Serial.println("Taste: RIGHT");
+        // Serial.println("Taste: RIGHT");
         return BTN_RIGHT;
     }
     if (adc_key_in < 200) {
         lastButtonPress = millis();
-        Serial.println("Taste: UP");
+        // Serial.println("Taste: UP");
         return BTN_UP;
     }
     if (adc_key_in < 400) {
         lastButtonPress = millis();
-        Serial.println("Taste: DOWN");
+        // Serial.println("Taste: DOWN");
         return BTN_DOWN;
     }
     if (adc_key_in < 600) {
         lastButtonPress = millis();
-        Serial.println("Taste: LEFT");
+        // Serial.println("Taste: LEFT");
         return BTN_LEFT;
     }
     if (adc_key_in < 800) {
         lastButtonPress = millis();
-        Serial.println("Taste: SELECT");
+        // Serial.println("Taste: SELECT");
         return BTN_SELECT;
     }
 
