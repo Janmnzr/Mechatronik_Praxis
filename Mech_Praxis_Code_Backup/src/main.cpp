@@ -101,20 +101,23 @@ void runStateMachine() {
                 SignalType confSig = getConfirmedSignal();
                 int leftCnt = getLeftSideCount();
                 int rightCnt = getRightSideCount();
-                int dir = getTurnDirection();
+                int greenD = getGreenDiff();
+                bool greenDet = isGreenDetected();
 
-                // Zeile 1: Aktuelles Signal oder Sensor-Counts
-                if (curSig != SIG_NONE) {
-                    snprintf(l1, 17, "%s Dir:%d", getSignalName(curSig), dir);
+                // Zeile 1: Sensor-Counts und Grün-Status
+                if (greenDet) {
+                    snprintf(l1, 17, "GRUEN! %d %s", greenD, (greenD > 0) ? "L" : "R");
+                } else if (curSig != SIG_NONE) {
+                    snprintf(l1, 17, "%s", getSignalName(curSig));
                 } else {
                     snprintf(l1, 17, "L:%d R:%d", leftCnt, rightCnt);
                 }
 
-                // Zeile 2: Bestätigtes Signal oder Total Count
+                // Zeile 2: Grün-Differenz oder Bestätigung
                 if (confSig != SIG_NONE) {
                     snprintf(l2, 17, "OK! %s", getSignalName(confSig));
                 } else {
-                    snprintf(l2, 17, "Tot:%d D:%d", getActiveSensorCount(), getSensorDiff());
+                    snprintf(l2, 17, "GDiff:%d Tot:%d", greenD, getActiveSensorCount());
                 }
 
                 lcdPrint(l1, l2);

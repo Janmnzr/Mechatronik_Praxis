@@ -3,7 +3,7 @@
 #include "hardware.h"
 
 // =============================================================================
-// LOGIC.CPP - Vereinfachte Steuerungslogik
+// LOGIC.CPP - Vereinfachte Steuerungslogik mit GRÜN-Erkennung
 // =============================================================================
 
 // ===== PRIVATE VARIABLEN =====
@@ -11,15 +11,24 @@
 // --- Sensor-Daten ---
 static int currentDiff = 0;
 static int lastDiff = 0;
-static int leftSideCount = 0;                    // Anzahl aktiver Sensoren links (0-4)
-static int rightSideCount = 0;                   // Anzahl aktiver Sensoren rechts (0-4)
+static int leftSideCount = 0;      // Sensoren 0,1,2,3
+static int rightSideCount = 0;     // Sensoren 4,5,6,7
+static int leftOuterSum = 0;       // Sensor 0 + 1
+static int rightOuterSum = 0;      // Sensor 6 + 7
+static int greenDiff = 0;          // leftOuterSum - rightOuterSum
 
 // --- Signal-Erkennung (zeitbasiert) ---
-static SignalType currentSignal = SIG_NONE;      // Aktuell erkanntes Signal
-static SignalType confirmedSignal = SIG_NONE;    // Bestätigtes Signal (nach Mindestzeit)
-static int signalDirection = 0;                  // -1=Links, 0=Keine, 1=Rechts
-static unsigned long signalStartTime = 0;        // Wann wurde Signal erkannt?
-static bool signalStable = false;                // Ist Signal stabil?
+static SignalType currentSignal = SIG_NONE;
+static SignalType confirmedSignal = SIG_NONE;
+static int signalDirection = 0;    // -1=Rechts, 0=Keine, 1=Links
+static unsigned long signalStartTime = 0;
+static bool signalStable = false;
+
+// --- Grün-Erkennung ---
+static bool greenDetected = false;
+static unsigned long greenStartTime = 0;
+static bool greenConfirmed = false;
+static int greenDirection = 0;
 
 // --- Adaptiver PID ---
 static float lastError = 0;
@@ -27,7 +36,7 @@ static unsigned long lastPidTime = 0;
 
 // --- Smart Speed ---
 static int targetSpeed = SPEED_NORMAL;
-static float smoothedSpeed = SPEED_NORMAL;       // Geglättete Geschwindigkeit
+static float smoothedSpeed = SPEED_NORMAL;
 static bool speedReduced = false;
 static unsigned long speedReduceTime = 0;
 
@@ -40,22 +49,28 @@ void initLogic() {
 }
 
 void resetLogic() {
-    // Sensor-Daten
     currentDiff = 0;
     lastDiff = 0;
+    leftSideCount = 0;
+    rightSideCount = 0;
+    leftOuterSum = 0;
+    rightOuterSum = 0;
+    greenDiff = 0;
 
-    // Signal-Erkennung
     currentSignal = SIG_NONE;
     confirmedSignal = SIG_NONE;
     signalDirection = 0;
     signalStartTime = 0;
     signalStable = false;
 
-    // PID
+    greenDetected = false;
+    greenStartTime = 0;
+    greenConfirmed = false;
+    greenDirection = 0;
+
     lastError = 0;
     lastPidTime = millis();
 
-    // Speed
     targetSpeed = SPEED_NORMAL;
     smoothedSpeed = SPEED_NORMAL;
     speedReduced = false;
@@ -67,105 +82,142 @@ void resetLogic() {
 // =============================================================================
 
 void updateSensors() {
-    // Position lesen (aktualisiert sensorValues[])
     readLinePosition();
 
-    // Diff berechnen
-    lastDiff = currentDiff;
-    currentDiff = getLeftSensorAvg() - getRightSensorAvg();
-}
-
-// =============================================================================
-// ZEITBASIERTE SIGNAL-ERKENNUNG
-// =============================================================================
-// LOGIK:
-// 1. Signal erkannt → sofort Geschwindigkeit reduzieren
-// 2. Signal bleibt für MINDESTZEIT stabil → Signal wird bestätigt
-// 3. Signal verschwindet vorher → Fehlalarm, weiterfahren
-// =============================================================================
-
-void updateSignalDetection() {
-    unsigned long now = millis();
-    int absDiff = abs(currentDiff);
-    int sensorCount = getActiveSensorCount();
-
-    SignalType detectedSignal = SIG_NONE;
-    int detectedDirection = 0;
-
-    // Zähle aktive Sensoren auf jeder Seite (jetzt global)
-    leftSideCount = 0;   // Sensoren 0,1,2,3
-    rightSideCount = 0;  // Sensoren 4,5,6,7
-
     extern uint16_t sensorValues[8];
+
+    // Äußere Sensoren summieren
+    leftOuterSum = sensorValues[0] + sensorValues[1];
+    rightOuterSum = sensorValues[6] + sensorValues[7];
+
+    // Grün-Differenz: Positiv = Links dunkler = Grün links
+    greenDiff = leftOuterSum - rightOuterSum;
+
+    // Aktive Sensoren pro Seite zählen
+    leftSideCount = 0;
+    rightSideCount = 0;
+
     for (int i = 0; i < 4; i++) {
         if (sensorValues[i] > LINE_THRESHOLD) leftSideCount++;
         if (sensorValues[i + 4] > LINE_THRESHOLD) rightSideCount++;
     }
 
-    // =========================================================================
-    // SCHRITT 1: Signal erkennen
-    // =========================================================================
+    // Diff für PID
+    int leftAvg = (sensorValues[0] + sensorValues[1]) / 2;
+    int rightAvg = (sensorValues[6] + sensorValues[7]) / 2;
+    lastDiff = currentDiff;
+    currentDiff = leftAvg - rightAvg;
+}
 
-    // FALL 1: KREUZUNG (viele Sensoren aktiv)
-    if (sensorCount >= CROSSING_MIN_SENSORS) {
-        detectedSignal = SIG_CROSSING;
-        // Richtung aus aktueller Diff
-        if (currentDiff < -CURVE_DIFF_MIN) {
-            detectedDirection = -1;  // Rechts (vertauscht)
-        } else if (currentDiff > CURVE_DIFF_MIN) {
-            detectedDirection = 1;   // Links (vertauscht)
-        } else {
-            detectedDirection = 0;   // Geradeaus
+// =============================================================================
+// GRÜN-ERKENNUNG (für T-Kreuzungen)
+// =============================================================================
+
+void updateSignalDetection() {
+    unsigned long now = millis();
+    int absDiff = abs(greenDiff);
+
+    SignalType detectedSignal = SIG_NONE;
+    int detectedDirection = 0;
+
+    // =========================================================================
+    // SCHRITT 1: GRÜN-ERKENNUNG
+    // =========================================================================
+    // Grün reflektiert IR anders als Weiß
+    // → Äußere Sensoren zeigen Unterschied
+
+    if (absDiff > GREEN_DIFF_THRESHOLD) {
+        // Grün erkannt!
+        int newDir = (greenDiff > 0) ? 1 : -1;  // Positiv = Links dunkler → Links
+
+        if (!greenDetected || greenDirection != newDir) {
+            // Neues Grün-Signal
+            greenDetected = true;
+            greenDirection = newDir;
+            greenStartTime = now;
+            greenConfirmed = false;
+
+            // Sofort langsamer werden
+            speedReduced = true;
+            speedReduceTime = now;
+            targetSpeed = SPEED_SLOW;
+        }
+        else if (!greenConfirmed && (now - greenStartTime >= GREEN_CONFIRM_MS)) {
+            // Grün ist stabil → Bestätigt!
+            greenConfirmed = true;
+            detectedSignal = (greenDirection > 0) ? SIG_CURVE_LEFT : SIG_CURVE_RIGHT;
+            detectedDirection = greenDirection;
         }
     }
-    // FALL 2: 90°-KURVE - EINFACHE FESTE BEDINGUNGEN
-    else if (leftSideCount >= 3 && sensorCount < 6) {
-        // Linkskurve: Mindestens 3 Sensoren links, aber keine Kreuzung
-        detectedSignal = SIG_CURVE_LEFT;
-        detectedDirection = 1;  // Links
-    }
-    else if (rightSideCount >= 3 && sensorCount < 6) {
-        // Rechtskurve: Mindestens 3 Sensoren rechts, aber keine Kreuzung
-        detectedSignal = SIG_CURVE_RIGHT;
-        detectedDirection = -1;  // Rechts
+    else {
+        // Kein Grün mehr
+        if (greenDetected && !greenConfirmed) {
+            // War Fehlalarm
+            greenDetected = false;
+            greenDirection = 0;
+            speedReduced = false;
+            targetSpeed = SPEED_NORMAL;
+        }
     }
 
     // =========================================================================
-    // SCHRITT 2: Zeitbasierte Validierung
+    // SCHRITT 2: 90°-KURVE (ohne Grün)
+    // =========================================================================
+    // Nur wenn KEIN Grün erkannt wird!
+
+    if (!greenDetected && detectedSignal == SIG_NONE) {
+        // Linkskurve: 3+ Sensoren links, wenige rechts
+        if (leftSideCount >= CURVE_MIN_SENSORS && rightSideCount <= 1) {
+            detectedSignal = SIG_CURVE_LEFT;
+            detectedDirection = 1;
+        }
+        // Rechtskurve: 3+ Sensoren rechts, wenige links
+        else if (rightSideCount >= CURVE_MIN_SENSORS && leftSideCount <= 1) {
+            detectedSignal = SIG_CURVE_RIGHT;
+            detectedDirection = -1;
+        }
+    }
+
+    // =========================================================================
+    // SCHRITT 3: Zeitbasierte Validierung
     // =========================================================================
 
     if (detectedSignal != SIG_NONE) {
-        // Signal erkannt → sofort bremsen!
+        // Signal erkannt → sofort bremsen (falls nicht schon wegen Grün)
         if (!speedReduced) {
             speedReduced = true;
             speedReduceTime = now;
             targetSpeed = SPEED_SLOW;
         }
 
-        // Neues Signal oder gleich wie vorher?
+        // Gleiches Signal oder neues?
         if (detectedSignal == currentSignal && detectedDirection == signalDirection) {
-            // Signal stabil → prüfe Zeit
-            if (signalStartTime > 0 && !signalStable) {
+            // Signal stabil → prüfe Zeit (nur für Kurven, Grün ist schon geprüft)
+            if (!greenConfirmed && signalStartTime > 0 && !signalStable) {
                 unsigned long signalDuration = now - signalStartTime;
-
-                // Mindestzeit erreicht?
-                if (signalDuration >= SIGNAL_CONFIRM_MS) {
+                if (signalDuration >= 80) {  // 80ms für Kurven
                     signalStable = true;
                     confirmedSignal = currentSignal;
                 }
             }
-        } else {
-            // Neues Signal → Timer neu starten
+            else if (greenConfirmed) {
+                // Grün wurde bestätigt
+                signalStable = true;
+                confirmedSignal = currentSignal;
+            }
+        }
+        else {
+            // Neues Signal
             currentSignal = detectedSignal;
             signalDirection = detectedDirection;
             signalStartTime = now;
             signalStable = false;
             confirmedSignal = SIG_NONE;
         }
-    } else {
-        // Kein Signal → zurücksetzen
+    }
+    else {
+        // Kein Signal
         if (currentSignal != SIG_NONE) {
-            // Signal verschwunden ohne Bestätigung → Fehlalarm
             currentSignal = SIG_NONE;
             signalDirection = 0;
             signalStartTime = 0;
@@ -174,8 +226,8 @@ void updateSignalDetection() {
         }
 
         // Geschwindigkeit wiederherstellen
-        if (speedReduced) {
-            if (now - speedReduceTime > SPEED_RESTORE_MS) {
+        if (speedReduced && !greenDetected) {
+            if (now - speedReduceTime > 100) {
                 speedReduced = false;
                 targetSpeed = SPEED_NORMAL;
             }
@@ -184,53 +236,42 @@ void updateSignalDetection() {
 }
 
 // =============================================================================
-// ADAPTIVER PID-REGLER
+// PID-REGLER
 // =============================================================================
 
 void updatePID() {
     unsigned long now = millis();
     int position = readLinePosition();
 
-    // Fehler berechnen
     float error = position - LINE_CENTER;
 
-    // Deadzone
     if (abs(error) < PID_DEADZONE) {
         error = 0;
     }
 
-    // Zeitdifferenz
     float dt = (now - lastPidTime) / 1000.0f;
     if (dt < 0.001f) dt = 0.001f;
     lastPidTime = now;
 
-    // === ADAPTIVE PID-WERTE ===
     float speedFactor = smoothedSpeed / (float)SPEED_NORMAL;
     float adaptiveKP = PID_KP * (0.8f + 0.4f * speedFactor);
-    float adaptiveKD = PID_KD * (0.8f + 0.3f * speedFactor);  // Reduziert für sanftere Bewegungen
+    float adaptiveKD = PID_KD * (0.8f + 0.3f * speedFactor);
 
-    // Bei großem Fehler: Extra KP-Boost
     if (abs(error) > 2000) {
         adaptiveKP *= 1.3f;
     }
 
-    // Derivative
     float derivative = (error - lastError) / dt;
-
-    // PID-Berechnung
     float correction = (adaptiveKP * error) + (adaptiveKD * derivative);
 
-    // Begrenzung
     float maxCorr = smoothedSpeed * 0.8f;
     correction = constrain(correction, -maxCorr, maxCorr);
 
     lastError = error;
 
-    // Motor-Geschwindigkeiten
     float leftSpeed = smoothedSpeed - correction;
     float rightSpeed = smoothedSpeed + correction;
 
-    // Bei sehr großem Fehler: inneres Rad stärker bremsen
     if (abs(error) > 1500) {
         float brakeFactor = 0.4f;
         if (error > 0) {
@@ -240,7 +281,6 @@ void updatePID() {
         }
     }
 
-    // Begrenzen und setzen
     leftSpeed = constrain(leftSpeed, 0, SPEED_MAX);
     rightSpeed = constrain(rightSpeed, 0, SPEED_MAX);
 
@@ -248,13 +288,12 @@ void updatePID() {
 }
 
 // =============================================================================
-// SMART SPEED MIT RAMPE
+// SMART SPEED
 // =============================================================================
 
 void updateSpeed() {
     float alpha = 0.15f;
 
-    // Beim Bremsen schneller, beim Beschleunigen langsamer
     if (targetSpeed < smoothedSpeed) {
         alpha = 0.25f;  // Schneller bremsen
     } else {
@@ -263,7 +302,6 @@ void updateSpeed() {
 
     smoothedSpeed = smoothedSpeed + alpha * (targetSpeed - smoothedSpeed);
 
-    // Minimum Speed
     if (smoothedSpeed < 50) smoothedSpeed = 50;
 }
 
@@ -307,6 +345,14 @@ SignalType getCurrentSignal() {
     return currentSignal;
 }
 
+int getGreenDiff() {
+    return greenDiff;
+}
+
+bool isGreenDetected() {
+    return greenDetected;
+}
+
 // =============================================================================
 // AKTIONEN
 // =============================================================================
@@ -317,6 +363,10 @@ void clearConfirmedSignal() {
     signalDirection = 0;
     signalStartTime = 0;
     signalStable = false;
+
+    greenDetected = false;
+    greenConfirmed = false;
+    greenDirection = 0;
 }
 
 // =============================================================================
@@ -326,9 +376,9 @@ void clearConfirmedSignal() {
 const char* getSignalName(SignalType s) {
     switch (s) {
         case SIG_NONE:         return "NONE";
-        case SIG_CURVE_LEFT:   return "KURVE-L";
-        case SIG_CURVE_RIGHT:  return "KURVE-R";
-        case SIG_CROSSING:     return "KREUZUNG";
+        case SIG_CURVE_LEFT:   return greenConfirmed ? "T-L" : "90-L";
+        case SIG_CURVE_RIGHT:  return greenConfirmed ? "T-R" : "90-R";
+        case SIG_CROSSING:     return "KREUZ";
         default:               return "?";
     }
 }

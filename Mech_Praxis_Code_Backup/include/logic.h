@@ -40,6 +40,8 @@ int getSensorDiff();                // Aktuelle Sensor-Differenz
 int getLeftSideCount();             // Anzahl aktiver Sensoren links (0-4)
 int getRightSideCount();            // Anzahl aktiver Sensoren rechts (0-4)
 SignalType getCurrentSignal();      // Aktuell erkanntes (noch nicht bestätigtes) Signal
+int getGreenDiff();                 // Grün-Differenz (Sensor0+1 - Sensor6+7), positiv = Grün links
+bool isGreenDetected();             // Ist gerade Grün erkannt?
 
 // ===== AKTIONEN =====
 void clearConfirmedSignal();        // Signal als "behandelt" markieren

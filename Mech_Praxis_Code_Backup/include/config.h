@@ -51,9 +51,9 @@
 // =============================================================================
 
 #define SPEED_MAX       800     // Maximale Geschwindigkeit
-#define SPEED_NORMAL    300     // Normale Linienfolge-Geschwindigkeit - reduziert für bessere Erkennung
-#define SPEED_SLOW      200     // Reduzierte Geschwindigkeit bei Ereignis-Erkennung
-#define SPEED_TURN      150     // Geschwindigkeit für 90°-Drehungen
+#define SPEED_NORMAL    400     // Normale Linienfolge-Geschwindigkeit
+#define SPEED_SLOW      260     // Reduzierte Geschwindigkeit bei Grün-Erkennung (66%)
+#define SPEED_TURN      200     // Geschwindigkeit für 90°-Drehungen
 
 // ===== BESCHLEUNIGUNG =====
 #define ACCELERATION    800     // Steps/s² (sanfter Start)
@@ -94,16 +94,19 @@
 //         Richtung:  Aus aktueller Diff beim Erkennen
 // =============================================================================
 
-// --- 90°-KURVEN-ERKENNUNG ---
-#define CURVE_DIFF_MIN      600     // Ab dieser Diff = 90°-Kurve erkannt
-#define CURVE_DIFF_MAX      1100    // Maximale Diff (darüber = Fehler/Noise)
+// --- 90°-KURVEN (ohne Grün) ---
+#define CURVE_MIN_SENSORS   3       // Mind. 3 von 4 Sensoren auf einer Seite
 
-// --- KREUZUNG ---
-#define CROSSING_MIN_SENSORS 6      // Mind. 6 von 8 Sensoren = Kreuzung
+// --- T-KREUZUNG MIT GRÜN ---
+// Grün reflektiert IR anders als Weiß → äußere Sensoren zeigen Unterschied
+// Diff = (Sensor0 + Sensor1) - (Sensor6 + Sensor7)
+// Positiv = Links dunkler (Grün links) → Links abbiegen
+// Negativ = Rechts dunkler (Grün rechts) → Rechts abbiegen
+#define GREEN_DIFF_THRESHOLD  300   // Ab dieser Diff = Grün erkannt
+#define GREEN_CONFIRM_MS      100   // Grün muss 100ms stabil sein
 
-// --- VALIDIERUNG (Zeitbasiert) ---
-#define SIGNAL_CONFIRM_MS   80      // Mindestzeit für stabile Signal-Bestätigung - reduziert für schnellere Erkennung
-#define SPEED_RESTORE_MS    100     // Zeit bis Geschwindigkeit wieder hochfährt - reduziert für schnellere Beschleunigung
+// --- TIMING ---
+#define TURN_COOLDOWN_MS    1500    // Pause zwischen Abbiegungen
 
 // =============================================================================
 // MANÖVER-KONSTANTEN (berechnet aus Mechanik)
@@ -115,7 +118,7 @@
 // =============================================================================
 
 #define STEPS_PER_CM        64
-#define STEPS_90_DEGREE     625     // 90°-Drehung - reduziert für bessere Positionierung
+#define STEPS_90_DEGREE     680     // 90°-Drehung
 #define STEPS_BEFORE_TURN   320     // 5cm vorfahren vor Drehung (Radachse auf Kreuzung)
 #define STEPS_BACKWARD      128     // 2cm zurück bei Linienverlust
 
