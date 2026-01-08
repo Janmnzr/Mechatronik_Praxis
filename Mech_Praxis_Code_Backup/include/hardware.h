@@ -57,7 +57,6 @@ bool isLineDetected();                      // Mindestens 1 Sensor > Threshold
 // Rohe Sensor-Werte (für Differenz-Berechnung)
 int getLeftSensorAvg();                     // Durchschnitt S0 + S1
 int getRightSensorAvg();                    // Durchschnitt S6 + S7
-int getSensorDiff();                        // Links - Rechts
 
 // =============================================================================
 // LCD FUNKTIONEN (dumm - nur Hardware-Zugriff)

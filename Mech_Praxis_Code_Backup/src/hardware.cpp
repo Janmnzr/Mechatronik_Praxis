@@ -184,10 +184,6 @@ int getRightSensorAvg() {
     return (sensorValues[6] + sensorValues[7]) / 2;
 }
 
-int getSensorDiff() {
-    return getLeftSensorAvg() - getRightSensorAvg();
-}
-
 // =============================================================================
 // LCD FUNKTIONEN
 // =============================================================================
