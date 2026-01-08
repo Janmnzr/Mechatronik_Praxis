@@ -194,15 +194,11 @@ int getSensorDiff() {
 
 void initLCD() {
     lcd.begin(16, 2);
-    
+
     pinMode(LCD_BACKLIGHT, OUTPUT);
     digitalWrite(LCD_BACKLIGHT, HIGH);
-    
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("LINIENFOLGER V3");
-    lcd.setCursor(0, 1);
-    lcd.print("Initialisiere...");
+
+    lcdPrint("LINIENFOLGER V3", "Initialisiere...");
 }
 
 void lcdClear() {
@@ -211,20 +207,35 @@ void lcdClear() {
 
 void lcdPrint(const char* line1, const char* line2) {
     lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print(line1);
+
+    // Display um 180° gedreht: Zeilen tauschen und Text umkehren
+    // Zeile 1 → unten rechts, Zeile 2 → oben rechts
+
+    // Erste Zeile (kommt nach unten, gespiegelt)
+    if (line1 != nullptr) {
+        int len = strlen(line1);
+        lcd.setCursor(15, 1);  // Rechts unten starten
+        for (int i = len - 1; i >= 0; i--) {
+            lcd.setCursor(15 - (len - 1 - i), 1);
+            lcd.write(line1[i]);
+        }
+    }
+
+    // Zweite Zeile (kommt nach oben, gespiegelt)
     if (line2 != nullptr) {
-        lcd.setCursor(0, 1);
-        lcd.print(line2);
+        int len = strlen(line2);
+        lcd.setCursor(15, 0);  // Rechts oben starten
+        for (int i = len - 1; i >= 0; i--) {
+            lcd.setCursor(15 - (len - 1 - i), 0);
+            lcd.write(line2[i]);
+        }
     }
 }
 
 void lcdPrintNum(const char* label, int value) {
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print(label);
-    lcd.setCursor(0, 1);
-    lcd.print(value);
+    char line2[17];
+    snprintf(line2, 17, "%d", value);
+    lcdPrint(label, line2);
 }
 
 Button readButton() {

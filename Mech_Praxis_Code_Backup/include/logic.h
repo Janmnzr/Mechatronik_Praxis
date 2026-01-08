@@ -4,25 +4,20 @@
 #include <Arduino.h>
 
 // =============================================================================
-// LOGIC.H - Intelligente Steuerungslogik
+// LOGIC.H - Vereinfachte Steuerungslogik
 // =============================================================================
 // Enthält:
 // - Adaptiver PID-Regler
-// - Event-Erkennung (Grün, 90°-Kurve, Kreuzung)
+// - Zeitbasierte Signal-Erkennung (Kurve/Kreuzung)
 // - Smart Speed mit Rampen
-// - Vorausschauende Erkennung
-// - Lernende Schwellwerte
 // =============================================================================
 
-// ===== ERKANNTE EVENTS =====
-enum Event {
-    EVT_NONE = 0,
-    EVT_GREEN_LEFT,
-    EVT_GREEN_RIGHT,
-    EVT_CURVE_LEFT,
-    EVT_CURVE_RIGHT,
-    EVT_CROSSING_LEFT,
-    EVT_CROSSING_RIGHT
+// ===== SIGNAL-TYPEN =====
+enum SignalType {
+    SIG_NONE = 0,
+    SIG_CURVE_LEFT,      // Große Diff nach links
+    SIG_CURVE_RIGHT,     // Große Diff nach rechts
+    SIG_CROSSING         // Viele Sensoren aktiv
 };
 
 // ===== INITIALISIERUNG =====
@@ -31,27 +26,22 @@ void resetLogic();                  // Bei Neustart Linienfolger
 
 // ===== HAUPTFUNKTIONEN (jeden Loop aufrufen!) =====
 void updateSensors();               // Sensoren lesen + Diff berechnen
-void updateEventDetection();        // Events erkennen + validieren
+void updateSignalDetection();       // Signale erkennen (zeitbasiert)
 void updatePID();                   // Adaptive PID-Regelung
 void updateSpeed();                 // Smart Speed mit Rampe
 
 // ===== GETTER =====
-Event getPendingEvent();            // Welches Event steht an?
+SignalType getConfirmedSignal();    // Bestätigtes Signal (nach Mindestzeit)
+int getTurnDirection();             // -1=Links, 0=Kein, 1=Rechts
 int getCurrentSpeed();              // Aktuelle Zielgeschwindigkeit
 int getSmoothedSpeed();             // Geglättete Geschwindigkeit (Rampe)
 bool isSpeedReduced();              // Ist Speed gedrosselt?
-int getGreenDirection();            // -1=Links, 0=Keine, 1=Rechts
 int getSensorDiff();                // Aktuelle Sensor-Differenz
-int getDiffTrend();                 // Trend: steigt/fällt die Diff?
 
 // ===== AKTIONEN =====
-void clearPendingEvent();           // Event als "behandelt" markieren
-void clearGreenMemory();            // Grün-Speicher löschen
-
-// ===== NACH KALIBRIERUNG =====
-void learnThresholds();             // Schwellwerte aus Kalibrierung lernen
+void clearConfirmedSignal();        // Signal als "behandelt" markieren
 
 // ===== DEBUG =====
-const char* getEventName(Event e);
+const char* getSignalName(SignalType s);
 
 #endif // LOGIC_H

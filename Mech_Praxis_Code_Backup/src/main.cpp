@@ -94,18 +94,21 @@ void runStateMachine() {
             
         case MODE_DEBUG:
             updateSensors();
-            updateEventDetection();
-            
+            updateSignalDetection();
+
             if (millis() - lastLcdUpdate > 200) {
                 char l1[17], l2[17];
-                Event e = getPendingEvent();
+                SignalType sig = getConfirmedSignal();
                 int diff = getSensorDiff();
-                
-                if (e != EVT_NONE) snprintf(l1, 17, "EVT: %s", getEventName(e));
-                else if (getGreenDirection()) snprintf(l1, 17, "GRUEN: %s", getGreenDirection() < 0 ? "L" : "R");
-                else snprintf(l1, 17, "OK Cnt:%d", getActiveSensorCount());
-                
-                snprintf(l2, 17, "D:%d T:%d", diff, getDiffTrend());
+                int dir = getTurnDirection();
+
+                if (sig != SIG_NONE) {
+                    snprintf(l1, 17, "SIG: %s", getSignalName(sig));
+                } else {
+                    snprintf(l1, 17, "OK Cnt:%d", getActiveSensorCount());
+                }
+
+                snprintf(l2, 17, "D:%d Dir:%d", diff, dir);
                 lcdPrint(l1, l2);
                 lastLcdUpdate = millis();
             }
@@ -122,9 +125,9 @@ void runStateMachine() {
 void runLineFollower() {
     // 1. Updates
     updateSensors();
-    updateEventDetection();
+    updateSignalDetection();  // Neue vereinfachte Funktion
     updateSpeed();
-    
+
     // 2. Linienverlust?
     if (!isLineDetected()) {
         mode = MODE_MANEUVERING;
@@ -139,26 +142,23 @@ void runLineFollower() {
         resetLogic();
         return;
     }
-    
-    // 3. Event behandeln?
-    Event evt = getPendingEvent();
-    if (evt != EVT_NONE && (millis() - lastTurnTime > TURN_COOLDOWN_MS)) {
-        int dir = 0;
-        if (evt == EVT_CURVE_LEFT || evt == EVT_CROSSING_LEFT || evt == EVT_GREEN_LEFT) dir = -1;
-        if (evt == EVT_CURVE_RIGHT || evt == EVT_CROSSING_RIGHT || evt == EVT_GREEN_RIGHT) dir = 1;
-        
+
+    // 3. Bestätigtes Signal behandeln?
+    SignalType sig = getConfirmedSignal();
+    if (sig != SIG_NONE && (millis() - lastTurnTime > TURN_COOLDOWN_MS)) {
+        int dir = getTurnDirection();
+
         if (dir != 0) {
             mode = MODE_MANEUVERING;
             executeTurn(dir);
             mode = MODE_RUNNING;
             lastTurnTime = millis();
-            clearPendingEvent();
-            clearGreenMemory();
+            clearConfirmedSignal();  // Neue Funktion
             resetLogic();
             return;
         }
     }
-    
+
     // 4. PID
     updatePID();
 }
@@ -237,7 +237,6 @@ void executeMenu(Menu item) {
             
         case MENU_CALIBRATE:
             calibrateSensors();
-            learnThresholds();  // NEU: Schwellwerte lernen!
             lcdPrint("MENUE:", menuName(menu));
             break;
             

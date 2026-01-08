@@ -78,37 +78,31 @@
 #define LINE_CENTER     3500    // Mitte der Linie (0-7000 Bereich)
 
 // =============================================================================
-// EREIGNIS-ERKENNUNG
+// SIGNAL-ERKENNUNG (Zeitbasiert)
 // =============================================================================
-// ZWEI VERSCHIEDENE FÄLLE:
+// VEREINFACHTE LOGIK:
+// 1. Signal erkannt (Kurve/Kreuzung) → sofort bremsen
+// 2. Signal bleibt stabil für SIGNAL_CONFIRM_MS → bestätigt → reagieren
+// 3. Signal verschwindet vorher → Fehlalarm → weiterfahren
 //
-// FALL 1: 90°-KURVE (Linie biegt einfach ab)
+// FALL 1: 90°-KURVE
 //         Erkennung: Große Differenz (600-1100)
-//         Richtung:  Direkt aus Diff! (+Diff = Links schwarz = Kurve LINKS)
-//         Grün:      NICHT benötigt!
+//         Richtung:  Direkt aus Diff (+Diff = Links, -Diff = Rechts)
 //
-// FALL 2: KREUZUNG (T-Kreuzung, mehrere Wege möglich)  
+// FALL 2: KREUZUNG
 //         Erkennung: Viele Sensoren aktiv (≥6)
-//         Richtung:  Aus GRÜN (vorher erkannt, Diff 80-300)
-//         Ohne Grün: Geradeaus weiterfahren
+//         Richtung:  Aus aktueller Diff beim Erkennen
 // =============================================================================
 
-// --- GRÜN-ERKENNUNG (nur für Kreuzungen!) ---
-#define GREEN_DIFF_MIN      80      // Minimale Diff für Grün-Erkennung
-#define GREEN_DIFF_MAX      300     // Maximale Diff für Grün-Erkennung
-#define GREEN_CONFIRM_MS    150     // Entprellzeit für Grün
-#define GREEN_MEMORY_MS     2500    // Wie lange Grün-Richtung gespeichert bleibt
-
-// --- 90°-KURVEN-ERKENNUNG (Richtung direkt aus Diff!) ---
+// --- 90°-KURVEN-ERKENNUNG ---
 #define CURVE_DIFF_MIN      600     // Ab dieser Diff = 90°-Kurve erkannt
 #define CURVE_DIFF_MAX      1100    // Maximale Diff (darüber = Fehler/Noise)
-#define CURVE_CONFIRM_MS    100     // Entprellzeit für 90°-Kurve
 
-// --- KREUZUNG (braucht Grün für Richtung!) ---
+// --- KREUZUNG ---
 #define CROSSING_MIN_SENSORS 6      // Mind. 6 von 8 Sensoren = Kreuzung
 
-// --- VALIDIERUNG (Entprellen) ---
-#define EVENT_DEBOUNCE_MS   50      // Minimale Zeit für stabiles Signal
+// --- VALIDIERUNG (Zeitbasiert) ---
+#define SIGNAL_CONFIRM_MS   150     // Mindestzeit für stabile Signal-Bestätigung
 #define SPEED_RESTORE_MS    300     // Zeit bis Geschwindigkeit wieder hochfährt
 
 // =============================================================================
