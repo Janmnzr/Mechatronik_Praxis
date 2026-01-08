@@ -1,0 +1,622 @@
+/*******************************************************************************
+ * TUNING-ANLEITUNG: Linienfolger Abbiegeerkennung
+ * 
+ * Diese Anleitung erklärt alle wichtigen Parameter und wie man sie anpasst,
+ * um das Verhalten des Linienfolgers zu optimieren.
+ * 
+ * Alle Parameter befinden sich in der Datei: config.h
+ ******************************************************************************/
+
+/*==============================================================================
+ * 1. SENSOR-KALIBRIERUNG
+ *============================================================================*/
+
+// Schwarze Linie Schwellwert
+//#define LINE_THRESHOLD   700
+
+/* ERKLÄRUNG:
+ * - Sensorwerte gehen von 0 (weiß) bis 1000 (schwarz)
+ * - LINE_THRESHOLD bestimmt, ab wann ein Sensor "schwarze Linie" sieht
+ * - Wert wird NACH der Kalibrierung verwendet
+ * 
+ * WANN ANPASSEN?
+ * - Linie wird nicht erkannt → Wert SENKEN (z.B. 600, 500)
+ * - Zu viele Fehlalarme auf weißem Untergrund → Wert ERHÖHEN (z.B. 750, 800)
+ * 
+ * TEST:
+ * - Befehl 'd' im Serial Monitor
+ * - Fahrzeug über Linie halten
+ * - Sensorwerte sollten über LINE_THRESHOLD liegen wenn auf Linie
+ * - Sensorwerte sollten unter LINE_THRESHOLD liegen wenn auf Weiß
+ */
+
+
+/*==============================================================================
+ * 2. GRÜN-ERKENNUNG (Abbiegemarker)
+ *============================================================================*/
+
+ 
+//#define GREEN_MIN        70
+//#define GREEN_MAX        350
+//#define GREEN_SENSOR_COUNT 2
+
+/* ERKLÄRUNG:
+ * GREEN_MIN/MAX: Bereich, in dem Sensorwerte als "grün" gelten
+ * GREEN_SENSOR_COUNT: Mindestanzahl Sensoren die Grün sehen müssen
+ * 
+ * Sensor-Logik:
+ * - Weiß: 0-50
+ * - Grün: 70-350  ← Dieser Bereich
+ * - Schwarz: 700-1000
+ * 
+ * WANN ANPASSEN?
+ * 
+ * Problem: "Grün wird NICHT erkannt"
+ * Lösung:
+ *   #define GREEN_MIN  50    // Niedriger (war 70)
+ *   #define GREEN_MAX  450   // Höher (war 350)
+ *   // oder
+ *   #define GREEN_SENSOR_COUNT 1  // Nur 1 Sensor reicht (war 2)
+ * 
+ * Problem: "Grün wird auf weißem Untergrund erkannt" (Fehlalarm)
+ * Lösung:
+ *   #define GREEN_MIN  100   // Höher (war 70)
+ *   #define GREEN_MAX  300   // Enger (war 350)
+ *   #define GREEN_SENSOR_COUNT 3  // Mehr Sensoren nötig (war 2)
+ * 
+ * Problem: "Grün rechts wird erkannt, aber nicht links" (oder umgekehrt)
+ * Ursache: Asymmetrische Beleuchtung oder Sensor-Verschmutzung
+ * Lösung: 
+ *   - Sensoren reinigen
+ *   - Neu kalibrieren (Befehl 'c', auch über GRÜNE Flächen fahren!)
+ * 
+ * TEST:
+ * - Befehl 'g' im Serial Monitor
+ * - Fahrzeug über grünes Quadrat halten
+ * - Sollte anzeigen: "Grün-Sensoren Links: 2 / 3 ✓ ERKANNT"
+ */
+
+
+/*==============================================================================
+ * 3. KREUZUNGS-ERKENNUNG (T-Kreuzung vs 90° Kurve)
+ *============================================================================*/
+
+#define CROSSING_THRESHOLD 6   // T-Kreuzung: Mind. 6 von 8 Sensoren
+#define CURVE_THRESHOLD    3   // 90° Kurve: Mind. 3 mittlere Sensoren
+
+/* ERKLÄRUNG:
+ * Der Linienfolger unterscheidet zwischen:
+ * 
+ * 1) T-KREUZUNG (breite schwarze Querlinie)
+ *    - Mindestens 6 von 8 Sensoren sehen Schwarz
+ *    - Reaktion: SCHARFE Drehung (Spot-Turn)
+ * 
+ * 2) 90° KURVE (normale Linie biegt ab)
+ *    - 3-5 mittlere Sensoren (Index 2,3,4,5) sehen Schwarz
+ *    - Reaktion: SANFTE Kurve (ein Motor langsamer)
+ * 
+ * 3) NORMALE LINIE
+ *    - Weniger als 3 Sensoren aktiv
+ *    - Reaktion: PID-Regler folgt der Linie
+ * 
+ * WANN ANPASSEN?
+ * 
+ * Problem: "Biegt bei JEDER 90° Kurve ab, auch OHNE grünes Quadrat"
+ * Ursache: CURVE_THRESHOLD zu niedrig → normale Linienführung wird als Kurve erkannt
+ * Lösung:
+ *   #define CURVE_THRESHOLD  4   // oder 5 (war 3)
+ *   // ODER: Kurven-Erkennung ganz deaktivieren (nur T-Kreuzungen verwenden)
+ * 
+ * Problem: "Biegt bei T-Kreuzung NICHT ab (fährt geradeaus drüber)"
+ * Ursache: CROSSING_THRESHOLD zu hoch
+ * Lösung:
+ *   #define CROSSING_THRESHOLD 5  // Niedriger (war 6)
+ * 
+ * Problem: "Biegt bei GERADER Linie plötzlich ab"
+ * Ursache: CROSSING_THRESHOLD zu niedrig
+ * Lösung:
+ *   #define CROSSING_THRESHOLD 7  // Höher (war 6)
+ * 
+ * Problem: "Erkennt 90° Kurven nicht mehr"
+ * Lösung:
+ *   #define CURVE_THRESHOLD  2   // Niedriger (war 3)
+ * 
+ * WICHTIG: Logik-Zusammenhang
+ * - Wenn Grün erkannt wurde UND danach T-Kreuzung/Kurve kommt → Abbiegen
+ * - Wenn Grün erkannt wurde, aber KEINE Kreuzung kommt → Verfällt nach 2,5 Sek
+ * - Wenn T-Kreuzung erkannt wird OHNE Grün → Geradeaus weiterfahren
+ * 
+ * TEST:
+ * - Befehl 'k' im Serial Monitor
+ * - Fahrzeug auf verschiedene Positionen halten:
+ *   1. Auf T-Kreuzung → sollte "Ist T-Kreuzung: JA" zeigen
+ *   2. Auf 90° Kurve → sollte "Ist 90° Kurve: JA" zeigen
+ *   3. Auf gerader Linie → beide sollten "NEIN" sein
+ */
+
+
+/*==============================================================================
+ * 4. GRÜN-GEDÄCHTNIS & TIMING
+ *============================================================================*/
+
+#define GREEN_MEMORY_TIME  2500   // Grün bleibt 2,5 Sekunden "aktiv"
+#define TURN_COOLDOWN      2000   // 2 Sekunden Pause zwischen Abbiegungen
+
+/* ERKLÄRUNG:
+ * GREEN_MEMORY_TIME: Wie lange "merkt" sich der Roboter ein erkanntes Grün?
+ * 
+ * Ablauf:
+ * 1. Grünes Quadrat erkannt → Timer startet
+ * 2. Roboter fährt weiter, sucht nach T-Kreuzung oder 90° Kurve
+ * 3. Findet er eine Kreuzung INNERHALB von 2,5 Sek → Biegt ab
+ * 4. Findet er KEINE Kreuzung nach 2,5 Sek → Grün verfällt, fährt weiter
+ * 
+ * TURN_COOLDOWN: Verhindert Doppel-Abbiegungen
+ * - Nach einer Abbiegung wartet der Roboter 2 Sekunden
+ * - In dieser Zeit wird KEINE weitere Abbiegung ausgeführt
+ * 
+ * WANN ANPASSEN?
+ * 
+ * Problem: "Grün wird erkannt, aber Abbiegung kommt ZU SPÄT (Grün verfallen)"
+ * Ursache: Abstand Grün → Kreuzung zu groß, oder Roboter zu langsam
+ * Lösung:
+ *   #define GREEN_MEMORY_TIME 3500  // 3,5 Sekunden (war 2500)
+ * 
+ * Problem: "Biegt zweimal hintereinander ab (Doppel-Abbiegung)"
+ * Ursache: TURN_COOLDOWN zu kurz
+ * Lösung:
+ *   #define TURN_COOLDOWN 3000  // 3 Sekunden (war 2000)
+ * 
+ * Problem: "Überspringt eine Abbiegung (zu langes Cooldown)"
+ * Ursache: TURN_COOLDOWN zu lang, nächste Kreuzung kommt zu schnell
+ * Lösung:
+ *   #define TURN_COOLDOWN 1500  // 1,5 Sekunden (war 2000)
+ * 
+ * HINWEIS:
+ * Bei BASE_SPEED=500 steps/s legt der Roboter etwa 5-10cm pro Sekunde zurück.
+ * → GREEN_MEMORY_TIME von 2500ms = ca. 12-25cm Fahrstrecke
+ * 
+ * TEST:
+ * - Fahrzeug auf Parcours starten (Befehl 's')
+ * - Im Serial Monitor erscheint bei Grün-Erkennung:
+ *   "[G:L 2s]" = Grün Links, 2 Sekunden verbleibend
+ *   "[G:L 1s]" = Grün Links, 1 Sekunde verbleibend
+ *   "[Grün-Gedächtnis abgelaufen]" = Zeit abgelaufen, kein Abbiegen
+ */
+
+
+/*==============================================================================
+ * 5. MOTOR-GESCHWINDIGKEITEN
+ *============================================================================*/
+
+#define BASE_SPEED       500   // Normale Fahrt
+#define TURN_SPEED       400   // Scharfe Drehung (T-Kreuzung)
+#define CURVE_SPEED      350   // Sanfte Kurve (90° Bogen)
+#define MAX_SPEED        1600  // Absolutes Maximum
+
+/* ERKLÄRUNG:
+ * BASE_SPEED: Geschwindigkeit beim Linienfolgen
+ * TURN_SPEED: Geschwindigkeit bei scharfen 90° Drehungen (Spot-Turn)
+ * CURVE_SPEED: Geschwindigkeit bei sanften 90° Kurven
+ * MAX_SPEED: Hardware-Limit der Motoren (nicht überschreiten!)
+ * 
+ * WANN ANPASSEN?
+ * 
+ * Problem: "Roboter fährt ZU LANGSAM"
+ * Lösung (Schritt für Schritt):
+ *   #define BASE_SPEED  600   // +100 (war 500)
+ *   // Testen, wenn stabil:
+ *   #define BASE_SPEED  700   // Weiter erhöhen
+ *   // Warnung: Bei >1000 wird es schwierig, PID muss angepasst werden
+ * 
+ * Problem: "Roboter verliert Linie in Kurven"
+ * Ursache: Zu schnell für PID-Regler
+ * Lösung:
+ *   #define BASE_SPEED  400   // Langsamer (war 500)
+ * 
+ * Problem: "Scharfe Abbiegungen (T-Kreuzung) zu langsam/schnell"
+ * Lösung:
+ *   #define TURN_SPEED  300   // Langsamer (war 400)
+ *   // oder
+ *   #define TURN_SPEED  500   // Schneller (war 400)
+ * 
+ * Problem: "90° Kurven zu SCHARF (verliert Linie)"
+ * Lösung:
+ *   #define CURVE_SPEED 250   // Langsamer (war 350)
+ * 
+ * Problem: "90° Kurven zu LANGSAM (kommt nicht rum)"
+ * Lösung:
+ *   #define CURVE_SPEED 450   // Schneller (war 350)
+ * 
+ * HINWEIS:
+ * - Alle Geschwindigkeiten in steps/Sekunde
+ * - Bei 1/8 Microstepping: 1600 steps/s = 1 Umdrehung/Sek
+ * - Typische Werte: BASE_SPEED 400-800, TURN_SPEED 300-500
+ */
+
+
+/*==============================================================================
+ * 6. DREHUNGS-DAUER
+ *============================================================================*/
+
+#define SHARP_TURN_DURATION  1200  // Dauer scharfe 90° Drehung (ms)
+#define SMOOTH_CURVE_DURATION 800  // Dauer sanfte 90° Kurve (ms)
+#define FORWARD_BEFORE_TURN   200  // Vorwärts vor Abbiegung (mm)
+
+/* ERKLÄRUNG:
+ * Diese Werte steuern, wie lange die Motoren bei Abbiegungen laufen.
+ * 
+ * SHARP_TURN_DURATION:
+ * - Gilt für T-Kreuzungen
+ * - Spot-Turn: Ein Motor vorwärts, einer rückwärts
+ * - Sollte ca. 90° Drehung ergeben
+ * 
+ * SMOOTH_CURVE_DURATION:
+ * - Gilt für normale 90° Kurven
+ * - Ein Motor läuft mit 100%, der andere mit 30%
+ * - Macht sanften Bogen
+ * 
+ * FORWARD_BEFORE_TURN:
+ * - Fährt etwas vorwärts VOR der Drehung
+ * - Wichtig um Kreuzung komplett zu verlassen
+ * 
+ * WANN ANPASSEN?
+ * 
+ * Problem: "Scharfe Drehung dreht ZU WENIG (< 90°)"
+ * Lösung:
+ *   #define SHARP_TURN_DURATION 1400  // Länger (war 1200)
+ * 
+ * Problem: "Scharfe Drehung dreht ZU VIEL (> 90°)"
+ * Lösung:
+ *   #define SHARP_TURN_DURATION 1000  // Kürzer (war 1200)
+ * 
+ * Problem: "Sanfte Kurve kommt nicht rum (zu wenig Drehung)"
+ * Lösung:
+ *   #define SMOOTH_CURVE_DURATION 1000  // Länger (war 800)
+ * 
+ * Problem: "Sanfte Kurve dreht zu weit"
+ * Lösung:
+ *   #define SMOOTH_CURVE_DURATION 600  // Kürzer (war 800)
+ * 
+ * Problem: "Dreht auf der Stelle VOR der Kreuzung"
+ * Ursache: FORWARD_BEFORE_TURN zu klein
+ * Lösung:
+ *   #define FORWARD_BEFORE_TURN 300  // Mehr vorfahren (war 200)
+ * 
+ * Problem: "Fährt über Kreuzung hinaus, dreht zu spät"
+ * Ursache: FORWARD_BEFORE_TURN zu groß
+ * Lösung:
+ *   #define FORWARD_BEFORE_TURN 100  // Weniger vorfahren (war 200)
+ * 
+ * WICHTIG: Feintuning-Methode
+ * 1. Test-Befehl verwenden: 'l' (Links scharf) oder 'n' (Links sanft)
+ * 2. Drehung beobachten
+ * 3. Wert in 100ms-Schritten anpassen
+ * 4. Erneut testen bis perfekt
+ */
+
+
+/*==============================================================================
+ * 7. PID-PARAMETER (Linienfolger-Stabilität)
+ *============================================================================*/
+
+#define KP  0.5    // Proportional: Wie stark reagiert er auf Abweichung?
+#define KI  0.0    // Integral: Korrigiert langfristige Drift (meist 0)
+#define KD  1.0    // Derivative: Dämpft Oszillation
+
+/* ERKLÄRUNG:
+ * PID-Regler sorgt dafür, dass der Roboter der Linie folgt.
+ * 
+ * KP (Proportional):
+ * - Basis-Reaktion auf Abweichung
+ * - Höherer Wert = stärkere Korrektur = schnellere Reaktion
+ * - Zu hoch → Roboter oszilliert (schlingert)
+ * 
+ * KD (Derivative):
+ * - Dämpft Oszillation
+ * - Höherer Wert = sanftere Bewegungen
+ * - Verhindert Überschwingen
+ * 
+ * KI (Integral):
+ * - Korrigiert systematische Fehler (z.B. einseitige Drift)
+ * - Meist auf 0 lassen!
+ * - Nur aktivieren bei dauerhafter Drift
+ * 
+ * WANN ANPASSEN?
+ * 
+ * Problem: "Roboter reagiert ZU LANGSAM auf Kurven"
+ * Lösung:
+ *   #define KP  0.6   // Erhöhen (war 0.5)
+ *   // In 0.05er-Schritten testen: 0.55, 0.6, 0.65...
+ * 
+ * Problem: "Roboter OSZILLIERT / SCHLINGERT (zickzack)"
+ * Ursache: KP zu hoch oder KD zu niedrig
+ * Lösung 1:
+ *   #define KP  0.4   // Senken (war 0.5)
+ * Lösung 2:
+ *   #define KD  1.5   // Erhöhen (war 1.0)
+ * 
+ * Problem: "Roboter driftet KONSTANT nach links/rechts"
+ * Ursache: Motoren ungleich oder mechanisches Problem
+ * Lösung 1: Mechanik prüfen (Räder, Gewichtsverteilung)
+ * Lösung 2: KI aktivieren
+ *   #define KI  0.001  // Sehr klein starten!
+ * 
+ * Problem: "Verhält sich INSTABIL bei hoher Geschwindigkeit"
+ * Lösung:
+ *   #define KD  1.5   // Mehr Dämpfung (war 1.0)
+ *   #define KP  0.4   // Weniger aggressiv (war 0.5)
+ * 
+ * TUNING-METHODE (Ziegler-Nichols vereinfacht):
+ * 1. KI = 0, KD = 0, KP = 0.1 setzen
+ * 2. KP langsam erhöhen bis Roboter oszilliert
+ * 3. KP auf 60% dieses Wertes reduzieren
+ * 4. KD hinzufügen (ca. KP * 2) um Oszillation zu dämpfen
+ * 5. Feintuning bis stabil
+ * 
+ * Beispiel:
+ * - Oszilliert bei KP = 0.8 → setze KP = 0.5 (60% von 0.8)
+ * - Setze KD = 1.0 (etwa KP * 2)
+ * - Testen und anpassen
+ */
+
+
+/*==============================================================================
+ * 8. DEBUG-EINSTELLUNGEN
+ *============================================================================*/
+
+#define DEBUG_SERIAL     true   // Serial-Debug an/aus
+#define DEBUG_INTERVAL   100    // Debug-Ausgabe alle 100ms
+#define DEBUG_GREEN      true   // Grün-Erkennungs-Debug
+
+/* ERKLÄRUNG:
+ * Diese Parameter steuern die Debug-Ausgaben im Serial Monitor.
+ * 
+ * DEBUG_SERIAL: 
+ * - true: Live-Debug während Fahrt
+ * - false: Keine Ausgaben (schneller, für Wettkämpfe)
+ * 
+ * DEBUG_INTERVAL:
+ * - Zu niedrig (<50ms): Zu viel Output, Serial-Puffer läuft voll
+ * - Zu hoch (>200ms): Man verpasst wichtige Events
+ * - Optimal: 100ms (10x pro Sekunde)
+ * 
+ * DEBUG_GREEN:
+ * - true: Zeigt detailliert Grün-Erkennungen
+ * - false: Nur grundlegende Infos
+ * 
+ * WANN ÄNDERN?
+ * - Für Wettkampf: Alles auf false setzen (maximale Performance)
+ * - Für Tuning: Alles auf true (maximale Info)
+ */
+
+
+/*==============================================================================
+ * 9. SCHRITT-FÜR-SCHRITT TUNING-PROZESS
+ *============================================================================*/
+
+/* 
+ * REIHENFOLGE FÜR OPTIMALES TUNING:
+ * 
+ * Schritt 1: KALIBRIERUNG
+ * - Befehl 'c' ausführen
+ * - Fahrzeug 10 Sekunden über ALLE Oberflächen bewegen:
+ *   * Schwarze Linie
+ *   * Weißer Untergrund
+ *   * Grüne Quadrate (WICHTIG!)
+ *   * T-Kreuzungen
+ * - Nicht überspringen! Basis für alles weitere.
+ * 
+ * Schritt 2: LINIENFOLGER BASIS (PID)
+ * - Befehl 's' (Start)
+ * - Auf gerader Linie testen
+ * - Ziel: Stabil, kein Schlingern
+ * - Parameter: KP, KD anpassen (siehe Abschnitt 7)
+ * 
+ * Schritt 3: GRÜN-ERKENNUNG
+ * - Befehl 'g' über grünes Quadrat
+ * - Muss "ERKANNT" anzeigen
+ * - Falls nicht: GREEN_MIN/MAX anpassen (siehe Abschnitt 2)
+ * 
+ * Schritt 4: KREUZUNGS-ERKENNUNG
+ * - Befehl 'k' über verschiedenen Stellen testen:
+ *   * T-Kreuzung → "Ist T-Kreuzung: JA"
+ *   * 90° Kurve → "Ist 90° Kurve: JA"
+ *   * Gerade Linie → beide "NEIN"
+ * - Parameter: CROSSING_THRESHOLD, CURVE_THRESHOLD anpassen
+ * 
+ * Schritt 5: DREHUNGEN EINZELN TESTEN
+ * - Befehl 'l': Links scharf → Muss ca. 90° drehen
+ * - Befehl 'n': Links sanft → Muss sanften Bogen machen
+ * - Befehl 'u': Rechts scharf → Muss ca. 90° drehen
+ * - Befehl 'o': Rechts sanft → Muss sanften Bogen machen
+ * - Parameter: SHARP_TURN_DURATION, SMOOTH_CURVE_DURATION anpassen
+ * 
+ * Schritt 6: GESAMTSYSTEM TESTEN
+ * - Befehl 's' (Start)
+ * - Kompletten Parcours fahren
+ * - Beobachten:
+ *   * Erkennt Grün?
+ *   * Biegt korrekt ab?
+ *   * Timing passt?
+ * - Parameter: GREEN_MEMORY_TIME, FORWARD_BEFORE_TURN anpassen
+ * 
+ * Schritt 7: GESCHWINDIGKEIT OPTIMIEREN
+ * - Wenn alles stabil läuft:
+ * - BASE_SPEED in 50er-Schritten erhöhen
+ * - Bei Instabilität: KD erhöhen oder BASE_SPEED wieder senken
+ * 
+ * WICHTIG:
+ * - Immer NUR EINEN Parameter auf einmal ändern!
+ * - Nach jeder Änderung testen
+ * - Alte Werte notieren (z.B. als Kommentar)
+ * - Bei Problemen: Zurück zu letzten funktionierenden Werten
+ */
+
+
+/*==============================================================================
+ * 10. HÄUFIGE PROBLEM-SZENARIEN & LÖSUNGEN
+ *============================================================================*/
+
+/*
+ * SZENARIO A: "Roboter verliert Linie in engen Kurven"
+ * 
+ * Mögliche Ursachen:
+ * 1. Zu schnell → BASE_SPEED senken
+ * 2. PID zu träge → KP leicht erhöhen
+ * 3. Mechanik → Rad-Abstand zur Linie prüfen
+ * 
+ * Lösungsschritte:
+ * 1. #define BASE_SPEED 400  // Langsamer
+ * 2. #define KP 0.6          // Reaktionsfreudiger
+ * 3. Testen, schrittweise anpassen
+ */
+
+/*
+ * SZENARIO B: "Biegt bei Grün ab, obwohl keine Kreuzung kommt"
+ * 
+ * Mögliche Ursachen:
+ * 1. CURVE_THRESHOLD zu niedrig → Normale Linie wird als Kurve erkannt
+ * 2. CROSSING_THRESHOLD zu niedrig → Normale Linie wird als Kreuzung erkannt
+ * 
+ * Lösungsschritte:
+ * 1. Befehl 'k' während normaler Fahrt
+ * 2. Prüfen was angezeigt wird
+ * 3. #define CURVE_THRESHOLD 4      // oder 5
+ * 4. #define CROSSING_THRESHOLD 7   // oder 8
+ */
+
+/*
+ * SZENARIO C: "Grün wird erkannt, aber Roboter biegt nicht ab"
+ * 
+ * Mögliche Ursachen:
+ * 1. Grün verfällt VOR Kreuzung → GREEN_MEMORY_TIME zu kurz
+ * 2. Kreuzung wird nicht erkannt → CROSSING_THRESHOLD zu hoch
+ * 3. Im Cooldown → TURN_COOLDOWN zu lang
+ * 
+ * Lösungsschritte:
+ * 1. Serial Monitor beobachten:
+ *    "[Grün-Gedächtnis abgelaufen]" → GREEN_MEMORY_TIME erhöhen
+ * 2. Befehl 'k' auf Kreuzung:
+ *    "Ist T-Kreuzung: NEIN" → CROSSING_THRESHOLD senken
+ * 3. #define GREEN_MEMORY_TIME 3500
+ * 4. #define CROSSING_THRESHOLD 5
+ */
+
+/*
+ * SZENARIO D: "Roboter macht Doppel-Abbiegungen"
+ * 
+ * Mögliche Ursachen:
+ * 1. TURN_COOLDOWN zu kurz
+ * 2. Nach Abbiegung gleich wieder Grün erkannt
+ * 
+ * Lösungsschritte:
+ * 1. #define TURN_COOLDOWN 3000  // Länger (war 2000)
+ * 2. Testen ob Problem behoben
+ */
+
+/*
+ * SZENARIO E: "Scharfe Drehung dreht nur 45° statt 90°"
+ * 
+ * Mögliche Ursachen:
+ * 1. SHARP_TURN_DURATION zu kurz
+ * 2. TURN_SPEED zu niedrig
+ * 3. Batterien leer (Motoren zu schwach)
+ * 
+ * Lösungsschritte:
+ * 1. Batterien prüfen / laden
+ * 2. #define SHARP_TURN_DURATION 1400  // Länger
+ * 3. #define TURN_SPEED 450            // Schneller
+ * 4. Test mit Befehl 'l' bis perfekt
+ */
+
+
+/*==============================================================================
+ * 11. ADVANCED TUNING (Für Experten)
+ *============================================================================*/
+
+/*
+ * ACCELERATION (Beschleunigung)
+ * #define ACCELERATION 1000  // Steps/Sekunde²
+ * 
+ * - Steuert wie schnell Motoren beschleunigen/abbremsen
+ * - Höher = ruckartiger, aber schneller
+ * - Niedriger = sanfter, aber langsamer
+ * 
+ * WANN ANPASSEN?
+ * - Motoren verlieren Steps → ACCELERATION senken
+ * - Zu langsame Beschleunigung → ACCELERATION erhöhen
+ * - Typische Werte: 500-2000
+ */
+
+/*
+ * ERROR_DEADZONE
+ * #define ERROR_DEADZONE 20
+ * 
+ * - Ignoriert kleine Abweichungen (unter 20)
+ * - Verhindert "Nervosität" auf gerader Linie
+ * 
+ * WANN ANPASSEN?
+ * - Roboter zittert auf Gerade → DEADZONE erhöhen (30, 40)
+ * - Roboter reagiert zu träge → DEADZONE senken (10, 15)
+ */
+
+/*
+ * EXTRA-KORREKTUR bei großen Fehlern
+ * Im Code (main.cpp, followLine-Funktion):
+ * 
+ *   if (abs(error) > 2000) {
+ *       float extraCorrection = correction * 0.5;
+ *       leftSpeed += extraCorrection;
+ *       rightSpeed -= extraCorrection;
+ *   }
+ * 
+ * - Verstärkt Korrektur bei großen Abweichungen
+ * - Faktor 0.5 = 50% Extra-Korrektur
+ * - Bei Bedarf auf 0.3 (weniger) oder 0.7 (mehr) ändern
+ */
+
+
+/*==============================================================================
+ * 12. CHECKLISTE VOR DEM WETTKAMPF
+ *============================================================================*/
+
+/*
+ * [ ] Batterien voll geladen
+ * [ ] Kalibrierung auf Wettkampf-Untergrund durchgeführt
+ * [ ] Alle Parameter getestet und dokumentiert
+ * [ ] Debug-Output deaktiviert (DEBUG_SERIAL = false)
+ * [ ] Backup der funktionierenden config.h gemacht
+ * [ ] Test-Parcours fehlerfrei gefahren (mindestens 3x)
+ * [ ] Grün-Erkennung auf Wettkampf-Grün getestet
+ * [ ] Notfall-Stopp Befehl 'x' getestet
+ * [ ] Verkabelung auf festen Sitz geprüft
+ * [ ] Mechanik auf Beschädigungen geprüft
+ */
+
+
+/*==============================================================================
+ * 13. WEITERE HILFE
+ *============================================================================*/
+
+/*
+ * SERIAL MONITOR BEFEHLE:
+ * h - Hilfe anzeigen
+ * d - Debug-Modus (Live-Sensordaten)
+ * k - Kreuzungs-Test
+ * g - Grün-Test
+ * l,n,u,o - Einzelne Manöver testen
+ * 
+ * WICHTIGE DEBUG-AUSGABEN:
+ * [G:L 2s] = Grün Links, 2 Sekunden verbleibend
+ * [T-X] = T-Kreuzung erkannt
+ * [90°] = 90° Kurve erkannt
+ * 
+ * BEI PROBLEMEN:
+ * 1. Serial Monitor auf 115200 Baud einstellen
+ * 2. Debug-Modus aktivieren (Befehl 'd')
+ * 3. Werte beobachten und mit dieser Anleitung abgleichen
+ * 4. Systematisch einen Parameter nach dem anderen anpassen
+ */
+
+/******************************************************************************/
