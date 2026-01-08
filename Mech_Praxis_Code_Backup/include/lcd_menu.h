@@ -60,5 +60,6 @@ void executeMenuItem(MenuItem item);
 
 // Hilfsfunktionen
 String getMenuItemName(MenuItem item);
+String getModeName(int mode);  // Konvertiert Mode-Enum zu String
 
 #endif

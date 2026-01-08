@@ -4,30 +4,32 @@
 #include <Arduino.h>
 #include <AccelStepper.h>
 
-// Globale Motor-Objekte
+// ===== Motor-Objekte =====
 extern AccelStepper motorRight;
 extern AccelStepper motorLeft;
 
-
-// Funktionen
+// ===== Grundfunktionen =====
 void initMotors();
-void setMotorSpeeds(float leftSpeed, float rightSpeed);
-void stopMotors();
-void motorISR();
 void enableMotors();
 void disableMotors();
+void setMotorSpeeds(float leftSpeed, float rightSpeed);
+void stopMotors();
+void stopMotorsAndDisable();
 
-// ===== VERBESSERTE Manöver-Funktionen =====
+// ===== Step-basierte Manöver (präzise!) =====
+void turnLeft90();       // Exakt 90° links
+void turnRight90();      // Exakt 90° rechts
+void driveSteps(int steps);   // Bestimmte Steps fahren (negativ = rückwärts)
+void driveCm(float cm);       // Bestimmte Strecke in cm fahren
+
+// ===== Zeit-basierte Manöver (Kompatibilität) =====
 void driveForward(unsigned long duration_ms);
+void turnLeftSharp();    // Scharfe 90° Kurve (T-Kreuzung)
+void turnLeftSmooth();   // Sanfte 90° Kurve
+void turnRightSharp();
+void turnRightSmooth();
 
-// Zwei Arten von Kurven:
-void turnLeftSharp();     // Scharfe 90° Drehung (T-Kreuzung)
-void turnLeftSmooth();    // Sanfte 90° Kurve (normaler Bogen)
-
-void turnRightSharp();    // Scharfe 90° Drehung (T-Kreuzung)
-void turnRightSmooth();   // Sanfte 90° Kurve (normaler Bogen)
-
-// Debug-Funktionen
+// ===== Debug =====
 void printMotorStatus();
 
 #endif

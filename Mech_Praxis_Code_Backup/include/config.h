@@ -28,43 +28,43 @@
 #define QTR_IR_PIN   44
 
 // ===== LINIEN-ERKENNUNG =====
-#define LINE_THRESHOLD   750
-#define GREEN_MIN        300
-#define GREEN_MAX        750
-#define GREEN_SENSOR_COUNT 2
-#define CROSSING_THRESHOLD 6
-#define CURVE_THRESHOLD    3
-#define GREEN_MEMORY_TIME  2500
-#define TURN_COOLDOWN     2000
-#define FORWARD_BEFORE_TURN 200
+#define LINE_THRESHOLD      750
+#define CROSSING_THRESHOLD  6
+#define CURVE_THRESHOLD     3
+#define TURN_COOLDOWN       1500
+
+// ===== GRÜN-ERKENNUNG (Differenz-basiert) =====
+#define GREEN_DIFF_MIN        80    // Minimale Differenz Ø(S0+S1) vs Ø(S6+S7) für Grün
+#define GREEN_DIFF_MAX        300   // Maximale Differenz Ø(S0+S1) vs Ø(S6+S7) für Grün
+#define GREEN_CONFIRM_TIME    200   // ms bis Grün bestätigt (erhöht für Stabilität)
+#define GREEN_MEMORY_TIME     2500  // ms nach Grün-Erkennung bis Timeout
+
+// ===== ABBIEGUNG =====
+#define STEPS_BEFORE_TURN     256   // 4cm vorfahren vor Drehung (4 * 64)
 
 // ===== MOTOR =====
 #define STEPS_PER_REV    200
 #define MICROSTEPS       8
-#define MAX_SPEED        1600
-#define BASE_SPEED       500
-#define TURN_SPEED       400
-#define ACCELERATION     1000
-#define CURVE_SPEED      350
-#define SHARP_TURN_DURATION 1300
-#define SMOOTH_CURVE_DURATION 850
+#define MAX_SPEED        800     // Reduziert für Stabilität
+#define BASE_SPEED       300
+#define TURN_SPEED       200     // Langsamer für präzise Drehungen
+#define ACCELERATION     800
 
-// ===== PID =====
-#define KP  0.4
-#define KI  0.0
-#define KD  1.1
+// ===== PID - OPTIMIERT =====
+// Größere Deadzone und sanftere Regelung
+#define KP  0.15        // Reduziert (war 0.4) - weniger aggressiv
+#define KI  0.0         // Nicht verwendet
+#define KD  0.8         // Reduziert (war 1.1) - weniger Überschwingen
 
 // ===== DEBUG =====
-#define DEBUG_SERIAL     true
-#define DEBUG_INTERVAL   1000
-#define DEBUG_GREEN      true
-#define DEBUG_SENSORS    true
-#define DEBUG_SERVO      true
+#ifndef DEBUG_SERIAL
+#define DEBUG_SERIAL     false   // Ausschalten für Performance (kann in platformio.ini überschrieben werden)
+#endif
+#define DEBUG_INTERVAL   500
+#define DEBUG_GREEN      false
+#define DEBUG_SENSORS    false
+#define DEBUG_SERVO      false
 #define DEBUG_MUX        false
-
-// ========================================
-// ===== NEUE SENSOREN & AKTOREN =====
-// ========================================
 
 // ===== SERVO =====
 #define SERVO_PIN        30
@@ -85,27 +85,19 @@
 #define DIST_CLOSE       300
 #define DIST_MEDIUM      600
 
-// ===== RGB-SENSOR (TCS34725) - LIGHTWEIGHT =====
+// ===== RGB-SENSOR (TCS34725) =====
 #define RGB_I2C_ADDR     0x29
-
-// TCS34725 Register
 #define TCS34725_COMMAND_BIT  0x80
 #define TCS34725_ENABLE       0x00
 #define TCS34725_ATIME        0x01
 #define TCS34725_CONTROL      0x0F
 #define TCS34725_ID           0x12
 #define TCS34725_CDATAL       0x14
-
-// Integration Time
 #define TCS34725_INTEGRATIONTIME_50MS   0xEB
 #define TCS34725_INTEGRATIONTIME_100MS  0xD5
-
-// Gain
 #define TCS34725_GAIN_1X   0x00
 #define TCS34725_GAIN_4X   0x01
 #define TCS34725_GAIN_16X  0x02
-
-// Settings
 #define RGB_INTEGRATION_TIME  TCS34725_INTEGRATIONTIME_50MS
 #define RGB_GAIN              TCS34725_GAIN_4X
 
@@ -114,22 +106,17 @@
 #define RED_R_MAX       500
 #define RED_G_MAX       100
 #define RED_B_MAX       100
-
-
 #define BLUE_B_MIN      150
 #define BLUE_B_MAX      500
 #define BLUE_R_MAX      100
 #define BLUE_G_MAX      100
-
 #define YELLOW_R_MIN    120
 #define YELLOW_G_MIN    120
 #define YELLOW_B_MAX    80
-
 #define GREEN_BALL_G_MIN 150
 #define GREEN_BALL_G_MAX 500
 #define GREEN_BALL_R_MAX 100
 #define GREEN_BALL_B_MAX 100
-
 #define BLACK_THRESHOLD  50
 #define WHITE_THRESHOLD  400
 

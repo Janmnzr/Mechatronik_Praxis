@@ -6,6 +6,7 @@
 
 // Globales Sensor-Objekt
 extern QTRSensors qtr;
+extern uint16_t sensorValues[8];  // Zugriff auf Sensorwerte
 
 
 // Funktionen
@@ -22,11 +23,10 @@ bool isCrossing();              // T-Kreuzung (viele Sensoren)
 bool is90DegreeCurve();         // 90° Kurve (wenige Sensoren)
 int getActiveSensorCount();     // Zählt schwarze Sensoren
 
-// Grün-Erkennung
-bool hasGreenMarkerLeft();      // Grün links
-bool hasGreenMarkerRight();     // Grün rechts
-bool hasGreenMarker();          // Grün irgendwo
-int getGreenSensorCount(bool left);  // Zählt grüne Sensoren
+// NEU: Differenz-basierte Grün-Erkennung (Ø S0+S1 vs S6+S7, Bereich 80-300)
+void updateGreenDetection();    // MUSS jeden Loop aufgerufen werden!
+bool isGreenConfirmedLeft();    // Grün links für 200ms stabil (diff: 80-300)
+bool isGreenConfirmedRight();   // Grün rechts für 200ms stabil (diff: -300 bis -80)
 
 // NEU: Verbesserte Linienverlust-Erkennung
 int getMiddleSensorCount();     // Zählt mittlere Sensoren (3,4,5)

@@ -1,5 +1,6 @@
 #include "lcd_menu.h"
 #include "config.h"
+#include "linienfollow.h"  // Für Mode enum
 
 // LCD-Objekt initialisieren (RS, E, D4, D5, D6, D7)
 LiquidCrystal lcd(LCD_RS_PIN, LCD_E_PIN, LCD_D4_PIN, LCD_D5_PIN, LCD_D6_PIN, LCD_D7_PIN);
@@ -44,6 +45,23 @@ String getMenuItemName(MenuItem item) {
             return "System Info";
         default:
             return "Unbekannt";
+    }
+}
+
+String getModeName(int mode) {
+    switch(mode) {
+        case STOPPED:
+            return "STOPPED";
+        case RUNNING:
+            return "RUNNING";
+        case CALIBRATION:
+            return "CALIB";
+        case DEBUG:
+            return "DEBUG";
+        case MANEUVERING:
+            return "MANEUVER";
+        default:
+            return "UNKNOWN";
     }
 }
 

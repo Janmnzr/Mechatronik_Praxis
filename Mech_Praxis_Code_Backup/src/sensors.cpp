@@ -45,22 +45,22 @@ void calibrateSensors() {
     // Serial.println("\n=== KALIBRIERUNG ===");
     // Serial.println("Fahrzeug ueber Linie bewegen!");
     // Serial.println("WICHTIG: Auch ueber GRUEN!");
-    // Serial.println("Dauer: 7 Sekunden\n");
+    // Serial.println("Dauer: 3 Sekunden\n");
 
     digitalWrite(QTR_IR_PIN, HIGH);
     delay(1000);
 
     pinMode(LED_BUILTIN, OUTPUT);
 
-    // 7 Sekunden = 350 Iterationen × 20ms
-    for (uint16_t i = 0; i < 350; i++) {
+    // 3 Sekunden = 150 Iterationen × 20ms
+    for (uint16_t i = 0; i < 150; i++) {
         qtr.calibrate();
         digitalWrite(LED_BUILTIN, (i / 20) % 2);
         // if (i % 40 == 0) Serial.print(".");
 
         // LCD Countdown (jede Sekunde aktualisieren)
         if (i % 50 == 0) {
-            int secondsLeft = 7 - (i / 50);
+            int secondsLeft = 3 - (i / 50);
             String line1 = "KALIBRIERUNG";
             String line2 = "Zeit: " + String(secondsLeft) + " Sek";
             displayStatus(line1, line2);
@@ -172,55 +172,70 @@ bool is90DegreeCurve() {
     return isCurve;
 }
 
-int getGreenSensorCount(bool left) {
-    readLinePosition();
-    int count = 0;
-    
-    if (left) {
-        for (uint8_t i = 0; i < 3; i++) {
-            if (sensorValues[i] >= GREEN_MIN && sensorValues[i] <= GREEN_MAX) count++;
+// ===== NEUE DIFFERENZ-BASIERTE GRÜN-ERKENNUNG =====
+// Vergleicht Durchschnitt S0+S1 (links) mit S6+S7 (rechts)
+// Unabhängig von absoluten Schwellwerten und Lichtverhältnissen!
+
+static unsigned long greenLeftStartTime = 0;
+static unsigned long greenRightStartTime = 0;
+static bool greenLeftConfirmed = false;
+static bool greenRightConfirmed = false;
+
+void updateGreenDetection() {
+    // Durchschnitt berechnen: (S0+S1) vs (S6+S7) für robustere Erkennung
+    int leftAvg = (sensorValues[0] + sensorValues[1]) / 2;
+    int rightAvg = (sensorValues[6] + sensorValues[7]) / 2;
+    int diff = leftAvg - rightAvg;
+    unsigned long now = millis();
+
+    // ---- GRÜN RECHTS ---- (vertauscht wegen Sensor-Montage!)
+    // Nur im Bereich 80-300 gilt als Grün (nicht Schwarz!)
+    if (diff >= GREEN_DIFF_MIN && diff <= GREEN_DIFF_MAX) {
+        // Grün wird erkannt
+        if (greenRightStartTime == 0) {
+            greenRightStartTime = now;  // Timer starten
+        } else if ((now - greenRightStartTime) >= GREEN_CONFIRM_TIME) {
+            greenRightConfirmed = true;  // Bestätigt nach 200ms
         }
     } else {
-        for (uint8_t i = 5; i < NUM_SENSORS; i++) {
-            if (sensorValues[i] >= GREEN_MIN && sensorValues[i] <= GREEN_MAX) count++;
-        }
+        // Kein Grün mehr → Reset
+        greenRightStartTime = 0;
+        greenRightConfirmed = false;
     }
-    
-    return count;
-}
 
-bool hasGreenMarkerLeft() {
-    int greenCount = getGreenSensorCount(true);
-    bool detected = (greenCount >= GREEN_SENSOR_COUNT);
-
-    #if DEBUG_GREEN
-    // if (detected) {
-    //     Serial.print("[GRÜN LINKS] ");
-    //     Serial.print(greenCount);
-    //     Serial.println(" Sensoren");
-    // }
-    #endif
-
-    return detected;
-}
-
-bool hasGreenMarkerRight() {
-    int greenCount = getGreenSensorCount(false);
-    bool detected = (greenCount >= GREEN_SENSOR_COUNT);
+    // ---- GRÜN LINKS ---- (vertauscht wegen Sensor-Montage!)
+    // Nur im Bereich -300 bis -80 gilt als Grün (nicht Schwarz!)
+    if (diff <= -GREEN_DIFF_MIN && diff >= -GREEN_DIFF_MAX) {
+        // Grün wird erkannt
+        if (greenLeftStartTime == 0) {
+            greenLeftStartTime = now;  // Timer starten
+        } else if ((now - greenLeftStartTime) >= GREEN_CONFIRM_TIME) {
+            greenLeftConfirmed = true;  // Bestätigt nach 200ms
+        }
+    } else {
+        // Kein Grün mehr → Reset
+        greenLeftStartTime = 0;
+        greenLeftConfirmed = false;
+    }
 
     #if DEBUG_GREEN
-    // if (detected) {
-    //     Serial.print("[GRÜN RECHTS] ");
-    //     Serial.print(greenCount);
-    //     Serial.println(" Sensoren");
+    // if (greenLeftConfirmed || greenRightConfirmed) {
+    //     Serial.print("[GRÜN] Diff: ");
+    //     Serial.print(diff);
+    //     Serial.print(" | Links: ");
+    //     Serial.print(greenLeftConfirmed ? "JA" : "NEIN");
+    //     Serial.print(" | Rechts: ");
+    //     Serial.println(greenRightConfirmed ? "JA" : "NEIN");
     // }
     #endif
-
-    return detected;
 }
 
-bool hasGreenMarker() {
-    return hasGreenMarkerLeft() || hasGreenMarkerRight();
+bool isGreenConfirmedLeft() {
+    return greenLeftConfirmed;
+}
+
+bool isGreenConfirmedRight() {
+    return greenRightConfirmed;
 }
 
 void printGreenDebug() {
