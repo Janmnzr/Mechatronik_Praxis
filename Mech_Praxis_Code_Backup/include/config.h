@@ -51,7 +51,7 @@
 // =============================================================================
 
 #define SPEED_MAX       800     // Maximale Geschwindigkeit
-#define SPEED_NORMAL    400     // Normale Linienfolge-Geschwindigkeit  
+#define SPEED_NORMAL    300     // Normale Linienfolge-Geschwindigkeit - reduziert für bessere Erkennung
 #define SPEED_SLOW      200     // Reduzierte Geschwindigkeit bei Ereignis-Erkennung
 #define SPEED_TURN      150     // Geschwindigkeit für 90°-Drehungen
 
@@ -67,8 +67,8 @@
 
 #define PID_KP          0.15f   // Proportional (Reaktionsstärke)
 #define PID_KI          0.0f    // Integral (nicht verwendet)
-#define PID_KD          0.8f    // Differential (Dämpfung)
-#define PID_DEADZONE    100     // Fehler unter diesem Wert = ignorieren
+#define PID_KD          0.4f    // Differential (Dämpfung) - reduziert für weniger Ruckeln
+#define PID_DEADZONE    150     // Fehler unter diesem Wert = ignorieren - erhöht für sanftere Fahrt
 
 // =============================================================================
 // SENSOR-SCHWELLWERTE
@@ -102,8 +102,8 @@
 #define CROSSING_MIN_SENSORS 6      // Mind. 6 von 8 Sensoren = Kreuzung
 
 // --- VALIDIERUNG (Zeitbasiert) ---
-#define SIGNAL_CONFIRM_MS   150     // Mindestzeit für stabile Signal-Bestätigung
-#define SPEED_RESTORE_MS    300     // Zeit bis Geschwindigkeit wieder hochfährt
+#define SIGNAL_CONFIRM_MS   80      // Mindestzeit für stabile Signal-Bestätigung - reduziert für schnellere Erkennung
+#define SPEED_RESTORE_MS    100     // Zeit bis Geschwindigkeit wieder hochfährt - reduziert für schnellere Beschleunigung
 
 // =============================================================================
 // MANÖVER-KONSTANTEN (berechnet aus Mechanik)
@@ -115,8 +115,8 @@
 // =============================================================================
 
 #define STEPS_PER_CM        64
-#define STEPS_90_DEGREE     675     // π * 13.5 / 4 * 64 ≈ 675
-#define STEPS_BEFORE_TURN   256     // 4cm vorfahren vor Drehung (Radachse auf Kreuzung)
+#define STEPS_90_DEGREE     625     // 90°-Drehung - reduziert für bessere Positionierung
+#define STEPS_BEFORE_TURN   320     // 5cm vorfahren vor Drehung (Radachse auf Kreuzung)
 #define STEPS_BACKWARD      128     // 2cm zurück bei Linienverlust
 
 // =============================================================================

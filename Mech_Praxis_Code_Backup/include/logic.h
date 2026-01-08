@@ -37,6 +37,9 @@ int getCurrentSpeed();              // Aktuelle Zielgeschwindigkeit
 int getSmoothedSpeed();             // Geglättete Geschwindigkeit (Rampe)
 bool isSpeedReduced();              // Ist Speed gedrosselt?
 int getSensorDiff();                // Aktuelle Sensor-Differenz
+int getLeftSideCount();             // Anzahl aktiver Sensoren links (0-4)
+int getRightSideCount();            // Anzahl aktiver Sensoren rechts (0-4)
+SignalType getCurrentSignal();      // Aktuell erkanntes (noch nicht bestätigtes) Signal
 
 // ===== AKTIONEN =====
 void clearConfirmedSignal();        // Signal als "behandelt" markieren

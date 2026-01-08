@@ -11,6 +11,8 @@
 // --- Sensor-Daten ---
 static int currentDiff = 0;
 static int lastDiff = 0;
+static int leftSideCount = 0;                    // Anzahl aktiver Sensoren links (0-4)
+static int rightSideCount = 0;                   // Anzahl aktiver Sensoren rechts (0-4)
 
 // --- Signal-Erkennung (zeitbasiert) ---
 static SignalType currentSignal = SIG_NONE;      // Aktuell erkanntes Signal
@@ -90,6 +92,16 @@ void updateSignalDetection() {
     SignalType detectedSignal = SIG_NONE;
     int detectedDirection = 0;
 
+    // Zähle aktive Sensoren auf jeder Seite (jetzt global)
+    leftSideCount = 0;   // Sensoren 0,1,2,3
+    rightSideCount = 0;  // Sensoren 4,5,6,7
+
+    extern uint16_t sensorValues[8];
+    for (int i = 0; i < 4; i++) {
+        if (sensorValues[i] > LINE_THRESHOLD) leftSideCount++;
+        if (sensorValues[i + 4] > LINE_THRESHOLD) rightSideCount++;
+    }
+
     // =========================================================================
     // SCHRITT 1: Signal erkennen
     // =========================================================================
@@ -99,22 +111,23 @@ void updateSignalDetection() {
         detectedSignal = SIG_CROSSING;
         // Richtung aus aktueller Diff
         if (currentDiff < -CURVE_DIFF_MIN) {
-            detectedDirection = 1;   // Rechts
+            detectedDirection = -1;  // Rechts (vertauscht)
         } else if (currentDiff > CURVE_DIFF_MIN) {
-            detectedDirection = -1;  // Links
+            detectedDirection = 1;   // Links (vertauscht)
         } else {
             detectedDirection = 0;   // Geradeaus
         }
     }
-    // FALL 2: 90°-KURVE (große Diff)
-    else if (absDiff >= CURVE_DIFF_MIN && absDiff <= CURVE_DIFF_MAX) {
-        if (currentDiff > 0) {
-            detectedSignal = SIG_CURVE_LEFT;
-            detectedDirection = -1;
-        } else {
-            detectedSignal = SIG_CURVE_RIGHT;
-            detectedDirection = 1;
-        }
+    // FALL 2: 90°-KURVE - EINFACHE FESTE BEDINGUNGEN
+    else if (leftSideCount >= 3 && sensorCount < 6) {
+        // Linkskurve: Mindestens 3 Sensoren links, aber keine Kreuzung
+        detectedSignal = SIG_CURVE_LEFT;
+        detectedDirection = 1;  // Links
+    }
+    else if (rightSideCount >= 3 && sensorCount < 6) {
+        // Rechtskurve: Mindestens 3 Sensoren rechts, aber keine Kreuzung
+        detectedSignal = SIG_CURVE_RIGHT;
+        detectedDirection = -1;  // Rechts
     }
 
     // =========================================================================
@@ -194,7 +207,7 @@ void updatePID() {
     // === ADAPTIVE PID-WERTE ===
     float speedFactor = smoothedSpeed / (float)SPEED_NORMAL;
     float adaptiveKP = PID_KP * (0.8f + 0.4f * speedFactor);
-    float adaptiveKD = PID_KD * (0.7f + 0.6f * speedFactor);
+    float adaptiveKD = PID_KD * (0.8f + 0.3f * speedFactor);  // Reduziert für sanftere Bewegungen
 
     // Bei großem Fehler: Extra KP-Boost
     if (abs(error) > 2000) {
@@ -280,6 +293,18 @@ bool isSpeedReduced() {
 
 int getSensorDiff() {
     return currentDiff;
+}
+
+int getLeftSideCount() {
+    return leftSideCount;
+}
+
+int getRightSideCount() {
+    return rightSideCount;
+}
+
+SignalType getCurrentSignal() {
+    return currentSignal;
 }
 
 // =============================================================================

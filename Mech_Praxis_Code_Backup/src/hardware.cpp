@@ -83,31 +83,37 @@ void stopMotors() {
 
 void executeSteps(int leftSteps, int rightSteps, int speed) {
     enableMotors();
-    
+
     int leftDir = (leftSteps >= 0) ? 1 : -1;
     int rightDir = (rightSteps >= 0) ? 1 : -1;
-    
+
     motorL.setSpeed(speed * leftDir);
     motorR.setSpeed(speed * rightDir);
-    
+
     long targetL = abs(leftSteps);
     long targetR = abs(rightSteps);
     long startL = motorL.currentPosition();
     long startR = motorR.currentPosition();
-    
+
     while (true) {
+        // Notfall-Stopp: LEFT-Taste prüfen
+        if (readButton() == BTN_LEFT) {
+            stopMotors();
+            return;
+        }
+
         long doneL = abs(motorL.currentPosition() - startL);
         long doneR = abs(motorR.currentPosition() - startR);
-        
+
         if (doneL >= targetL) motorL.setSpeed(0);
         if (doneR >= targetR) motorR.setSpeed(0);
-        
+
         if (doneL >= targetL && doneR >= targetR) break;
-        
+
         motorL.runSpeed();
         motorR.runSpeed();
     }
-    
+
     stopMotors();
 }
 
@@ -204,27 +210,14 @@ void lcdClear() {
 void lcdPrint(const char* line1, const char* line2) {
     lcd.clear();
 
-    // Display um 180° gedreht: Zeilen tauschen und Text umkehren
-    // Zeile 1 → unten rechts, Zeile 2 → oben rechts
-
-    // Erste Zeile (kommt nach unten, gespiegelt)
     if (line1 != nullptr) {
-        int len = strlen(line1);
-        lcd.setCursor(15, 1);  // Rechts unten starten
-        for (int i = len - 1; i >= 0; i--) {
-            lcd.setCursor(15 - (len - 1 - i), 1);
-            lcd.write(line1[i]);
-        }
+        lcd.setCursor(0, 0);
+        lcd.print(line1);
     }
 
-    // Zweite Zeile (kommt nach oben, gespiegelt)
     if (line2 != nullptr) {
-        int len = strlen(line2);
-        lcd.setCursor(15, 0);  // Rechts oben starten
-        for (int i = len - 1; i >= 0; i--) {
-            lcd.setCursor(15 - (len - 1 - i), 0);
-            lcd.write(line2[i]);
-        }
+        lcd.setCursor(0, 1);
+        lcd.print(line2);
     }
 }
 

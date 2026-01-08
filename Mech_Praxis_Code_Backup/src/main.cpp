@@ -5,9 +5,8 @@
 #include "logic.h"
 
 // =============================================================================
-// MAIN.CPP - Schlanke Hauptdatei
+// MAIN.CPP 
 // =============================================================================
-// Nur noch:
 // - State-Machine
 // - Menü
 // - Manöver-Ausführung
@@ -70,8 +69,8 @@ void loop() {
 // STATE MACHINE
 // =============================================================================
 void runStateMachine() {
-    // Notfall-Stopp: LEFT-Taste
-    if (mode != MODE_STOPPED && readButton() == BTN_LEFT) {
+    // Notfall-Stopp: LEFT-Taste (immer aktiv!)
+    if (readButton() == BTN_LEFT && mode != MODE_STOPPED) {
         mode = MODE_STOPPED;
         stopMotors();
         disableMotors();
@@ -81,39 +80,48 @@ void runStateMachine() {
         lcdPrint("MENUE:", menuName(menu));
         return;
     }
-    
+
     switch (mode) {
         case MODE_STOPPED:
             disableMotors();
             handleMenu();
             break;
-            
+
         case MODE_RUNNING:
             runLineFollower();
             break;
-            
+
         case MODE_DEBUG:
             updateSensors();
             updateSignalDetection();
 
             if (millis() - lastLcdUpdate > 200) {
                 char l1[17], l2[17];
-                SignalType sig = getConfirmedSignal();
-                int diff = getSensorDiff();
+                SignalType curSig = getCurrentSignal();
+                SignalType confSig = getConfirmedSignal();
+                int leftCnt = getLeftSideCount();
+                int rightCnt = getRightSideCount();
                 int dir = getTurnDirection();
 
-                if (sig != SIG_NONE) {
-                    snprintf(l1, 17, "SIG: %s", getSignalName(sig));
+                // Zeile 1: Aktuelles Signal oder Sensor-Counts
+                if (curSig != SIG_NONE) {
+                    snprintf(l1, 17, "%s Dir:%d", getSignalName(curSig), dir);
                 } else {
-                    snprintf(l1, 17, "OK Cnt:%d", getActiveSensorCount());
+                    snprintf(l1, 17, "L:%d R:%d", leftCnt, rightCnt);
                 }
 
-                snprintf(l2, 17, "D:%d Dir:%d", diff, dir);
+                // Zeile 2: Bestätigtes Signal oder Total Count
+                if (confSig != SIG_NONE) {
+                    snprintf(l2, 17, "OK! %s", getSignalName(confSig));
+                } else {
+                    snprintf(l2, 17, "Tot:%d D:%d", getActiveSensorCount(), getSensorDiff());
+                }
+
                 lcdPrint(l1, l2);
                 lastLcdUpdate = millis();
             }
             break;
-            
+
         case MODE_MANEUVERING:
             break;
     }
@@ -182,30 +190,42 @@ void executeTurn(int dir) {
 
 bool searchLine() {
     lcdPrint("SUCHE...", "");
-    
+
     // Zurück
     executeSteps(-STEPS_BACKWARD, -STEPS_BACKWARD, SPEED_TURN);
     readLinePosition();
     if (isLineDetected()) return true;
-    
+
     // Suchen
     int dir = (readLinePosition() < LINE_CENTER) ? -1 : 1;
-    
+
     for (int phase = 0; phase < 2; phase++) {
         int searchDir = (phase == 0) ? dir : -dir;
         int steps = (phase == 0) ? 10 : 20;
-        
+
         for (int i = 0; i < steps; i++) {
+            // Notfall-Stopp prüfen
+            if (readButton() == BTN_LEFT) {
+                stopMotors();
+                return false;
+            }
+
             setMotorSpeeds(searchDir * 100, -searchDir * 100);
             unsigned long t = millis();
             while (millis() - t < 100) {
+                // Notfall-Stopp auch während Drehung prüfen
+                if (readButton() == BTN_LEFT) {
+                    stopMotors();
+                    return false;
+                }
+
                 runMotors();
                 readLinePosition();
                 if (isLineDetected()) { stopMotors(); return true; }
             }
         }
     }
-    
+
     stopMotors();
     return false;
 }
