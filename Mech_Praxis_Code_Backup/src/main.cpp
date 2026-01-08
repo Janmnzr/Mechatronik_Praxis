@@ -1,296 +1,275 @@
 #include <Arduino.h>
-#include "config.h"
-#include "sensors.h"
-#include "motors.h"
-#include "lcd_menu.h"
-#include "linienfollow.h"
 #include <TimerOne.h>
+#include "config.h"
+#include "hardware.h"
+#include "logic.h"
 
-// ===== Funktions-Deklarationen =====
-void checkInputSources();
-void executeCommand(char cmd);
-void executeMenuCommand(MenuItem item);
-void motorISR();
-void showCalibrationValues();
+// =============================================================================
+// MAIN.CPP - Schlanke Hauptdatei
+// =============================================================================
+// Nur noch:
+// - State-Machine
+// - Menü
+// - Manöver-Ausführung
+// Logik ist in logic.cpp ausgelagert!
+// =============================================================================
 
+// ===== MODI =====
+enum Mode { MODE_STOPPED, MODE_RUNNING, MODE_DEBUG, MODE_MANEUVERING };
+enum Menu { MENU_START, MENU_CALIBRATE, MENU_DEBUG, MENU_MOTOR_TEST, MENU_COUNT };
+
+// ===== GLOBALE VARIABLEN =====
+static Mode mode = MODE_STOPPED;
+static Menu menu = MENU_START;
+static unsigned long lastTurnTime = 0;
+static unsigned long lastLcdUpdate = 0;
+
+// ===== VORWÄRTS-DEKLARATIONEN =====
+void runStateMachine();
+void runLineFollower();
+void executeTurn(int direction);
+bool searchLine();
+void handleMenu();
+void executeMenu(Menu item);
+const char* menuName(Menu m);
+
+// ===== MOTOR ISR =====
+void motorISR() {
+    if (mode == MODE_RUNNING) runMotors();
+}
+
+// =============================================================================
+// SETUP
+// =============================================================================
 void setup() {
+    #if DEBUG_SERIAL
     Serial.begin(115200);
-    Serial1.begin(9600);
-    delay(100);
-
+    #endif
+    
     initLCD();
     initSensors();
     initMotors();
-    initLineFollower();
-
-    // Timer für Motor-Steps (nur bei RUNNING aktiv)
+    initLogic();
+    
     Timer1.initialize(50);
     Timer1.attachInterrupt(motorISR);
-
-    currentMode = STOPPED;
-    displayStatus("System bereit", "Taste druecken");
+    
+    lcdPrint("LINIENFOLGER V3", "Optimiert!");
+    delay(1500);
+    lcdPrint("MENUE:", "> START");
 }
 
+// =============================================================================
+// MAIN LOOP
+// =============================================================================
 void loop() {
-    // LCD Menu (nur wenn gestoppt)
-    if (currentMode == STOPPED || currentMode == CALIBRATION) {
-        handleMenu();
+    runStateMachine();
+}
+
+// =============================================================================
+// STATE MACHINE
+// =============================================================================
+void runStateMachine() {
+    // Notfall-Stopp: LEFT-Taste
+    if (mode != MODE_STOPPED && readButton() == BTN_LEFT) {
+        mode = MODE_STOPPED;
+        stopMotors();
+        disableMotors();
+        resetLogic();
+        lcdPrint("GESTOPPT", "");
+        delay(500);
+        lcdPrint("MENUE:", menuName(menu));
+        return;
     }
+    
+    switch (mode) {
+        case MODE_STOPPED:
+            disableMotors();
+            handleMenu();
+            break;
+            
+        case MODE_RUNNING:
+            runLineFollower();
+            break;
+            
+        case MODE_DEBUG:
+            updateSensors();
+            updateEventDetection();
+            
+            if (millis() - lastLcdUpdate > 200) {
+                char l1[17], l2[17];
+                Event e = getPendingEvent();
+                int diff = getSensorDiff();
+                
+                if (e != EVT_NONE) snprintf(l1, 17, "EVT: %s", getEventName(e));
+                else if (getGreenDirection()) snprintf(l1, 17, "GRUEN: %s", getGreenDirection() < 0 ? "L" : "R");
+                else snprintf(l1, 17, "OK Cnt:%d", getActiveSensorCount());
+                
+                snprintf(l2, 17, "D:%d T:%d", diff, getDiffTrend());
+                lcdPrint(l1, l2);
+                lastLcdUpdate = millis();
+            }
+            break;
+            
+        case MODE_MANEUVERING:
+            break;
+    }
+}
 
-    // Notfall-Abbruch mit LEFT-Taste
-    if (currentMode == RUNNING || currentMode == DEBUG) {
-        static unsigned long lastButtonCheck = 0;
+// =============================================================================
+// LINIENFOLGER
+// =============================================================================
+void runLineFollower() {
+    // 1. Updates
+    updateSensors();
+    updateEventDetection();
+    updateSpeed();
+    
+    // 2. Linienverlust?
+    if (!isLineDetected()) {
+        mode = MODE_MANEUVERING;
+        if (!searchLine()) {
+            mode = MODE_STOPPED;
+            stopMotors();
+            lcdPrint("LINIE WEG!", "Gestoppt");
+            delay(2000);
+            return;
+        }
+        mode = MODE_RUNNING;
+        resetLogic();
+        return;
+    }
+    
+    // 3. Event behandeln?
+    Event evt = getPendingEvent();
+    if (evt != EVT_NONE && (millis() - lastTurnTime > TURN_COOLDOWN_MS)) {
+        int dir = 0;
+        if (evt == EVT_CURVE_LEFT || evt == EVT_CROSSING_LEFT || evt == EVT_GREEN_LEFT) dir = -1;
+        if (evt == EVT_CURVE_RIGHT || evt == EVT_CROSSING_RIGHT || evt == EVT_GREEN_RIGHT) dir = 1;
+        
+        if (dir != 0) {
+            mode = MODE_MANEUVERING;
+            executeTurn(dir);
+            mode = MODE_RUNNING;
+            lastTurnTime = millis();
+            clearPendingEvent();
+            clearGreenMemory();
+            resetLogic();
+            return;
+        }
+    }
+    
+    // 4. PID
+    updatePID();
+}
 
-        if (millis() - lastButtonCheck > 50) {
-            lastButtonCheck = millis();
+// =============================================================================
+// MANÖVER
+// =============================================================================
+void executeTurn(int dir) {
+    lcdPrint("ABBIEGEN", dir < 0 ? "LINKS" : "RECHTS");
+    
+    // Vorfahren
+    executeSteps(STEPS_BEFORE_TURN, STEPS_BEFORE_TURN, SPEED_TURN);
+    delay(30);
+    
+    // Drehen
+    if (dir < 0) executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);
+    else         executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);
+    
+    delay(30);
+}
 
-            extern Button readButton();
-            if (readButton() == BTN_LEFT) {
-                currentMode = STOPPED;
-                displayStatus("ABBRUCH", "Stoppe...");
-                stopMotors();
-                resetLineFollower();
-                delay(1000);
-                displayMenu();
+bool searchLine() {
+    lcdPrint("SUCHE...", "");
+    
+    // Zurück
+    executeSteps(-STEPS_BACKWARD, -STEPS_BACKWARD, SPEED_TURN);
+    readLinePosition();
+    if (isLineDetected()) return true;
+    
+    // Suchen
+    int dir = (readLinePosition() < LINE_CENTER) ? -1 : 1;
+    
+    for (int phase = 0; phase < 2; phase++) {
+        int searchDir = (phase == 0) ? dir : -dir;
+        int steps = (phase == 0) ? 10 : 20;
+        
+        for (int i = 0; i < steps; i++) {
+            setMotorSpeeds(searchDir * 100, -searchDir * 100);
+            unsigned long t = millis();
+            while (millis() - t < 100) {
+                runMotors();
+                readLinePosition();
+                if (isLineDetected()) { stopMotors(); return true; }
             }
         }
     }
-
-    // Serial-Befehle
-    checkInputSources();
-
-    // Hauptlogik
-    switch(currentMode) {
-        case RUNNING:
-            followLine();
-
-            // LCD-Update (alle 300ms für mehr Responsiveness)
-            {
-                static unsigned long lastLCD = 0;
-                if (millis() - lastLCD > 300) {
-                    extern TurnState turnState;
-                    int pos = readLinePosition();
-
-                    // Zeile 1: Status basierend auf turnState
-                    String line1 = "";
-                    if (turnState == TURNING) {
-                        line1 = "TURN ";
-                        line1 += (turnDirection == -1) ? "LEFT" : "RIGHT";
-                    } else if (greenDetected) {
-                        line1 = "GREEN ";
-                        line1 += (turnDirection == -1) ? "LEFT" : "RIGHT";
-                    } else {
-                        line1 = "Follow Line";
-                    }
-
-                    // Zeile 2: Position
-                    String line2 = "Pos:" + String(pos);
-
-                    displayStatus(line1, line2);
-                    lastLCD = millis();
-                }
-            }
-            break;
-
-        case DEBUG:
-            {
-                static unsigned long lastLCD = 0;
-                readLinePosition();
-                updateGreenDetection();  // NEU: Grün-Erkennung aktualisieren
-
-                if (millis() - lastLCD > 250) {
-                    extern uint16_t sensorValues[NUM_SENSORS];
-
-                    // Zeile 1: Status
-                    String line1 = "DBG: ";
-                    if (isGreenConfirmedLeft()) line1 += "G-LINKS";
-                    else if (isGreenConfirmedRight()) line1 += "G-RECHTS";
-                    else if (isCrossing()) line1 += "KREUZUNG";
-                    else if (is90DegreeCurve()) line1 += "90-KURVE";
-                    else line1 += "OK";
-
-                    // Zeile 2: Sensor-Differenz (Durchschnitt S0+S1 vs S6+S7)
-                    int leftAvg = (sensorValues[0] + sensorValues[1]) / 2;
-                    int rightAvg = (sensorValues[6] + sensorValues[7]) / 2;
-                    int diff = leftAvg - rightAvg;
-                    String line2 = "Diff: " + String(diff);
-
-                    displayStatus(line1, line2);
-                    lastLCD = millis();
-                }
-                stopMotors();
-            }
-            break;
-
-        case STOPPED:
-            disableMotors();  // Motoren im STOPPED-Modus deaktivieren
-            break;
-
-        case CALIBRATION:
-        case MANEUVERING:
-            // Nichts tun - Motoren werden in den Funktionen gesteuert
-            break;
-    }
+    
+    stopMotors();
+    return false;
 }
 
-void showCalibrationValues() {
-    extern QTRSensors qtr;
-
-    // Zeige Min-Werte für alle 8 Sensoren
-    for (uint8_t i = 0; i < NUM_SENSORS; i++) {
-        String line1 = "Sensor " + String(i) + " MIN";
-        String line2 = "Wert: " + String(qtr.calibrationOn.minimum[i]);
-        displayStatus(line1, line2);
-        delay(1500);
-    }
-
-    // Zeige Max-Werte für alle 8 Sensoren
-    for (uint8_t i = 0; i < NUM_SENSORS; i++) {
-        String line1 = "Sensor " + String(i) + " MAX";
-        String line2 = "Wert: " + String(qtr.calibrationOn.maximum[i]);
-        displayStatus(line1, line2);
-        delay(1500);
-    }
-
-    displayStatus("Kalibrierung", "Anzeige fertig");
-    delay(1000);
+// =============================================================================
+// MENÜ
+// =============================================================================
+void handleMenu() {
+    Button btn = readButton();
+    if (btn == BTN_NONE) return;
+    
+    if (btn == BTN_UP)   menu = (Menu)((menu + MENU_COUNT - 1) % MENU_COUNT);
+    if (btn == BTN_DOWN) menu = (Menu)((menu + 1) % MENU_COUNT);
+    if (btn == BTN_SELECT || btn == BTN_RIGHT) { executeMenu(menu); return; }
+    
+    char buf[17];
+    snprintf(buf, 17, "> %s", menuName(menu));
+    lcdPrint("MENUE:", buf);
 }
 
-void checkInputSources() {
-    char cmd = 0;
-
-    if (Serial.available() > 0) {
-        cmd = Serial.read();
-        while(Serial.available()) Serial.read();
-    }
-    else if (Serial1.available() > 0) {
-        cmd = Serial1.read();
-        while(Serial1.available()) Serial1.read();
-    }
-
-    if (cmd != 0) executeCommand(cmd);
-}
-
-void executeCommand(char cmd) {
-    switch(cmd) {
-        case 'c': case 'C':
-            currentMode = CALIBRATION;
-            stopMotors();
-            calibrateSensors();
-            currentMode = STOPPED;
-            break;
-
-        case 's': case 'S':
-            currentMode = RUNNING;
-            resetLineFollower();
+void executeMenu(Menu item) {
+    switch (item) {
+        case MENU_START:
+            lcdPrint("START", "");
+            resetLogic();
             enableMotors();
+            mode = MODE_RUNNING;
             break;
-
-        case 'x': case 'X': case ' ':
-            currentMode = STOPPED;
-            stopMotors();
-            resetLineFollower();
-            break;
-
-        case 'd': case 'D':
-            currentMode = (currentMode == DEBUG) ? STOPPED : DEBUG;
-            break;
-
-        // Kalibrierwerte anzeigen (nur im DEBUG-Modus)
-        case 'v': case 'V':
-            if (currentMode == DEBUG) {
-                showCalibrationValues();
-            }
-            break;
-
-        // Test-Befehle
-        case 'l': case 'L': turnLeft90(); break;
-        case 'r': case 'R': turnRight90(); break;
-        case 'f': case 'F': driveSteps(320); break;  // 5cm vor
-        case 'b': case 'B': driveSteps(-320); break; // 5cm zurück
-    }
-}
-
-// Motor-ISR: Nur bei RUNNING aktiv
-void motorISR() {
-    if (currentMode == RUNNING) {
-        motorLeft.runSpeed();
-        motorRight.runSpeed();
-    }
-}
-
-// ===== LCD Menu Befehle =====
-void executeMenuCommand(MenuItem item) {
-    switch(item) {
-        case MENU_KALIBRIERUNG:
-            displayStatus("KALIBRIERUNG", "Starte...");
-            currentMode = CALIBRATION;
-            stopMotors();
-            delay(500);
+            
+        case MENU_CALIBRATE:
             calibrateSensors();
-            currentMode = STOPPED;
-            displayStatus("Kalibrierung", "Fertig!");
-            delay(2000);
-            displayMenu();
+            learnThresholds();  // NEU: Schwellwerte lernen!
+            lcdPrint("MENUE:", menuName(menu));
             break;
-
-        case MENU_LINIENFOLGER_START:
-            displayStatus("LINIENFOLGER", "START...");
-            currentMode = RUNNING;
-            resetLineFollower();
-            enableMotors();
-            setMotorSpeeds(0, 0);
-            delay(100);
+            
+        case MENU_DEBUG:
+            mode = MODE_DEBUG;
             break;
-
-        case MENU_SENSOR_DEBUG:
-            if (currentMode == DEBUG) {
-                currentMode = STOPPED;
-                displayMenu();
-            } else {
-                displayStatus("SENSOR DEBUG", "Aktiv...");
-                currentMode = DEBUG;
-            }
-            break;
-
+            
         case MENU_MOTOR_TEST:
-            displayStatus("MOTOR TEST", "Starte...");
+            lcdPrint("TEST", "Links 90");
             enableMotors();
+            executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);
             delay(500);
-            
-            // Test 1: 90° Links
-            displayStatus("Test 1/3", "90 Links");
-            turnLeft90();
-            delay(1000);
-            
-            // Test 2: 90° Rechts
-            displayStatus("Test 2/3", "90 Rechts");
-            turnRight90();
-            delay(1000);
-            
-            // Test 3: Vorwärts 10cm
-            displayStatus("Test 3/3", "10cm vor");
-            driveCm(10);
-            delay(1000);
-            
+            lcdPrint("TEST", "Rechts 90");
+            executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);
+            delay(500);
+            lcdPrint("TEST", "10cm vor");
+            executeSteps(10 * STEPS_PER_CM, 10 * STEPS_PER_CM, SPEED_TURN);
             stopMotors();
-            displayStatus("Motor Test", "Fertig!");
-            delay(2000);
-            displayMenu();
+            lcdPrint("MENUE:", menuName(menu));
             break;
-
-        case MENU_SYSTEM_INFO:
-            {
-                String info1 = "KP:" + String(KP, 2) + " KD:" + String(KD, 2);
-                String info2 = "Spd:" + String(BASE_SPEED);
-                displayStatus(info1, info2);
-                delay(3000);
-                displayMenu();
-            }
-            break;
-
+            
         default:
-            displayMenu();
             break;
+    }
+}
+
+const char* menuName(Menu m) {
+    switch (m) {
+        case MENU_START:      return "START";
+        case MENU_CALIBRATE:  return "Kalibrieren";
+        case MENU_DEBUG:      return "Debug";
+        case MENU_MOTOR_TEST: return "Motor Test";
+        default:              return "?";
     }
 }

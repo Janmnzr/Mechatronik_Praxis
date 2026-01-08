@@ -1,123 +1,143 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// ===== MOTOR PINS =====
-#define DIR_PIN_R    41
-#define STEP_PIN_R   40
-#define DIR_PIN_L    39
-#define STEP_PIN_L   38
-#define ENABLE_PIN   22
+// =============================================================================
+// LINIENFOLGER V3 - VEREINFACHTE KONFIGURATION
+// =============================================================================
+// Alle Einstellungen an EINEM Ort. Keine versteckten Werte!
+// =============================================================================
 
-#define MS1_PIN_1    36
-#define MS2_PIN_1    34
-#define MS3_PIN_1    32
-#define MS1_PIN_2    37
-#define MS2_PIN_2    35
-#define MS3_PIN_2    33
+// ===== MOTOR PINS (Arduino Mega) =====
+#define DIR_PIN_R       41
+#define STEP_PIN_R      40
+#define DIR_PIN_L       39
+#define STEP_PIN_L      38
+#define ENABLE_PIN      22
 
-// ===== QTR SENSOREN =====
-#define QTR_PIN_1    A8
-#define QTR_PIN_2    A9
-#define QTR_PIN_3    A10
-#define QTR_PIN_4    A11
-#define QTR_PIN_5    A12
-#define QTR_PIN_6    A13
-#define QTR_PIN_7    A14
-#define QTR_PIN_8    A15
-#define NUM_SENSORS  8
-#define QTR_IR_PIN   44
+// Microstepping Pins (A4988/DRV8825)
+#define MS1_PIN_1       36
+#define MS2_PIN_1       34
+#define MS3_PIN_1       32
+#define MS1_PIN_2       37
+#define MS2_PIN_2       35
+#define MS3_PIN_2       33
 
-// ===== LINIEN-ERKENNUNG =====
-#define LINE_THRESHOLD      750
-#define CROSSING_THRESHOLD  6
-#define CURVE_THRESHOLD     3
-#define TURN_COOLDOWN       1500
+// ===== QTR-8RC SENSOR PINS =====
+#define QTR_PIN_1       A8
+#define QTR_PIN_2       A9
+#define QTR_PIN_3       A10
+#define QTR_PIN_4       A11
+#define QTR_PIN_5       A12
+#define QTR_PIN_6       A13
+#define QTR_PIN_7       A14
+#define QTR_PIN_8       A15
+#define NUM_SENSORS     8
+#define QTR_EMITTER_PIN 44      // IR-LED Emitter
 
-// ===== GRÜN-ERKENNUNG (Differenz-basiert) =====
-#define GREEN_DIFF_MIN        80    // Minimale Differenz Ø(S0+S1) vs Ø(S6+S7) für Grün
-#define GREEN_DIFF_MAX        300   // Maximale Differenz Ø(S0+S1) vs Ø(S6+S7) für Grün
-#define GREEN_CONFIRM_TIME    200   // ms bis Grün bestätigt (erhöht für Stabilität)
-#define GREEN_MEMORY_TIME     2500  // ms nach Grün-Erkennung bis Timeout
+// ===== LCD KEYPAD SHIELD =====
+#define LCD_RS          8
+#define LCD_E           9
+#define LCD_D4          4
+#define LCD_D5          5
+#define LCD_D6          6
+#define LCD_D7          7
+#define LCD_BACKLIGHT   10
+#define LCD_BUTTONS     A0
 
-// ===== ABBIEGUNG =====
-#define STEPS_BEFORE_TURN     256   // 4cm vorfahren vor Drehung (4 * 64)
+// =============================================================================
+// GESCHWINDIGKEITEN (Steps/Sekunde)
+// =============================================================================
+// Bei 1/8 Microstepping: 1600 steps/s = 1 Umdrehung/s ≈ 25cm/s
+// =============================================================================
 
-// ===== MOTOR =====
-#define STEPS_PER_REV    200
-#define MICROSTEPS       8
-#define MAX_SPEED        800     // Reduziert für Stabilität
-#define BASE_SPEED       300
-#define TURN_SPEED       200     // Langsamer für präzise Drehungen
-#define ACCELERATION     800
+#define SPEED_MAX       800     // Maximale Geschwindigkeit
+#define SPEED_NORMAL    400     // Normale Linienfolge-Geschwindigkeit  
+#define SPEED_SLOW      200     // Reduzierte Geschwindigkeit bei Ereignis-Erkennung
+#define SPEED_TURN      150     // Geschwindigkeit für 90°-Drehungen
 
-// ===== PID - OPTIMIERT =====
-// Größere Deadzone und sanftere Regelung
-#define KP  0.15        // Reduziert (war 0.4) - weniger aggressiv
-#define KI  0.0         // Nicht verwendet
-#define KD  0.8         // Reduziert (war 1.1) - weniger Überschwingen
+// ===== BESCHLEUNIGUNG =====
+#define ACCELERATION    800     // Steps/s² (sanfter Start)
 
-// ===== DEBUG =====
-#ifndef DEBUG_SERIAL
-#define DEBUG_SERIAL     false   // Ausschalten für Performance (kann in platformio.ini überschrieben werden)
-#endif
-#define DEBUG_INTERVAL   500
-#define DEBUG_GREEN      false
-#define DEBUG_SENSORS    false
-#define DEBUG_SERVO      false
-#define DEBUG_MUX        false
+// =============================================================================
+// PID-REGLER
+// =============================================================================
+// Der PID regelt NORMALE Linienfolge und LEICHTE Kurven (bis ~45°)
+// Für 90° und Kreuzungen übernimmt die State-Machine
+// =============================================================================
 
-// ===== SERVO =====
-#define SERVO_PIN        30
-#define SERVO_LEFT       0
-#define SERVO_CENTER     90
-#define SERVO_RIGHT      180
+#define PID_KP          0.15f   // Proportional (Reaktionsstärke)
+#define PID_KI          0.0f    // Integral (nicht verwendet)
+#define PID_KD          0.8f    // Differential (Dämpfung)
+#define PID_DEADZONE    100     // Fehler unter diesem Wert = ignorieren
 
-// ===== I²C MULTIPLEXER =====
-#define MUX_I2C_ADDR     0x70
-#define MUX_CHANNEL_DIST 0
-#define MUX_CHANNEL_RGB  1
+// =============================================================================
+// SENSOR-SCHWELLWERTE
+// =============================================================================
 
-// ===== ABSTANDSSENSOR =====
-#define DIST_I2C_ADDR    0x29
-#define DIST_TIMEOUT_MS  500
-#define DIST_MAX_RANGE   2000
-#define DIST_VERY_CLOSE  100
-#define DIST_CLOSE       300
-#define DIST_MEDIUM      600
+#define LINE_THRESHOLD  750     // Ab diesem Wert = "Schwarz" erkannt
+#define LINE_CENTER     3500    // Mitte der Linie (0-7000 Bereich)
 
-// ===== RGB-SENSOR (TCS34725) =====
-#define RGB_I2C_ADDR     0x29
-#define TCS34725_COMMAND_BIT  0x80
-#define TCS34725_ENABLE       0x00
-#define TCS34725_ATIME        0x01
-#define TCS34725_CONTROL      0x0F
-#define TCS34725_ID           0x12
-#define TCS34725_CDATAL       0x14
-#define TCS34725_INTEGRATIONTIME_50MS   0xEB
-#define TCS34725_INTEGRATIONTIME_100MS  0xD5
-#define TCS34725_GAIN_1X   0x00
-#define TCS34725_GAIN_4X   0x01
-#define TCS34725_GAIN_16X  0x02
-#define RGB_INTEGRATION_TIME  TCS34725_INTEGRATIONTIME_50MS
-#define RGB_GAIN              TCS34725_GAIN_4X
+// =============================================================================
+// EREIGNIS-ERKENNUNG
+// =============================================================================
+// ZWEI VERSCHIEDENE FÄLLE:
+//
+// FALL 1: 90°-KURVE (Linie biegt einfach ab)
+//         Erkennung: Große Differenz (600-1100)
+//         Richtung:  Direkt aus Diff! (+Diff = Links schwarz = Kurve LINKS)
+//         Grün:      NICHT benötigt!
+//
+// FALL 2: KREUZUNG (T-Kreuzung, mehrere Wege möglich)  
+//         Erkennung: Viele Sensoren aktiv (≥6)
+//         Richtung:  Aus GRÜN (vorher erkannt, Diff 80-300)
+//         Ohne Grün: Geradeaus weiterfahren
+// =============================================================================
 
-// ===== BALLFARBEN =====
-#define RED_R_MIN       150
-#define RED_R_MAX       500
-#define RED_G_MAX       100
-#define RED_B_MAX       100
-#define BLUE_B_MIN      150
-#define BLUE_B_MAX      500
-#define BLUE_R_MAX      100
-#define BLUE_G_MAX      100
-#define YELLOW_R_MIN    120
-#define YELLOW_G_MIN    120
-#define YELLOW_B_MAX    80
-#define GREEN_BALL_G_MIN 150
-#define GREEN_BALL_G_MAX 500
-#define GREEN_BALL_R_MAX 100
-#define GREEN_BALL_B_MAX 100
-#define BLACK_THRESHOLD  50
-#define WHITE_THRESHOLD  400
+// --- GRÜN-ERKENNUNG (nur für Kreuzungen!) ---
+#define GREEN_DIFF_MIN      80      // Minimale Diff für Grün-Erkennung
+#define GREEN_DIFF_MAX      300     // Maximale Diff für Grün-Erkennung
+#define GREEN_CONFIRM_MS    150     // Entprellzeit für Grün
+#define GREEN_MEMORY_MS     2500    // Wie lange Grün-Richtung gespeichert bleibt
 
-#endif
+// --- 90°-KURVEN-ERKENNUNG (Richtung direkt aus Diff!) ---
+#define CURVE_DIFF_MIN      600     // Ab dieser Diff = 90°-Kurve erkannt
+#define CURVE_DIFF_MAX      1100    // Maximale Diff (darüber = Fehler/Noise)
+#define CURVE_CONFIRM_MS    100     // Entprellzeit für 90°-Kurve
+
+// --- KREUZUNG (braucht Grün für Richtung!) ---
+#define CROSSING_MIN_SENSORS 6      // Mind. 6 von 8 Sensoren = Kreuzung
+
+// --- VALIDIERUNG (Entprellen) ---
+#define EVENT_DEBOUNCE_MS   50      // Minimale Zeit für stabiles Signal
+#define SPEED_RESTORE_MS    300     // Zeit bis Geschwindigkeit wieder hochfährt
+
+// =============================================================================
+// MANÖVER-KONSTANTEN (berechnet aus Mechanik)
+// =============================================================================
+// Raddurchmesser: 8cm → Umfang = π * 8 = 25.13cm
+// Radabstand: 13.5cm → 90°-Drehkreis = π * 13.5 / 4 = 10.6cm
+// Steps/Umdrehung: 200 * 8 (Microstepping) = 1600
+// Steps/cm: 1600 / 25.13 ≈ 64
+// =============================================================================
+
+#define STEPS_PER_CM        64
+#define STEPS_90_DEGREE     675     // π * 13.5 / 4 * 64 ≈ 675
+#define STEPS_BEFORE_TURN   256     // 4cm vorfahren vor Drehung (Radachse auf Kreuzung)
+#define STEPS_BACKWARD      128     // 2cm zurück bei Linienverlust
+
+// =============================================================================
+// TIMING
+// =============================================================================
+
+#define TURN_COOLDOWN_MS    1500    // Pause zwischen Abbiegungen
+#define LCD_UPDATE_MS       500     // LCD-Aktualisierung (nur im STOPPED/DEBUG)
+#define SEARCH_TIMEOUT_MS   5000    // Max. Zeit für Liniensuche
+
+// =============================================================================
+// DEBUG (ausschalten für Performance!)
+// =============================================================================
+
+#define DEBUG_SERIAL        false   // true = Serial-Ausgaben aktiv
+#define DEBUG_LCD_RUNNING   false   // true = LCD während Fahrt aktualisieren
+
+#endif // CONFIG_H
