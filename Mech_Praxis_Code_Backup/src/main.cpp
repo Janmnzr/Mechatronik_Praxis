@@ -99,11 +99,16 @@ void runStateMachine() {
                 extern uint16_t sensorValues[8];
                 char l1[17], l2[17];
 
-                // Zeile 1: Äußere Sensor-Werte (für Grün-Erkennung)
-                // Format: L0:xxx L1:xxx R6:xxx R7:xxx
-                snprintf(l1, 17, "%d %d|%d %d",
-                    sensorValues[0], sensorValues[1],
-                    sensorValues[6], sensorValues[7]);
+                // Zeile 1: Alle 8 Sensoren skaliert 0-9
+                snprintf(l1, 17, "%d%d%d%d%d%d%d%d",
+                    (sensorValues[0] * 9) / 1000,
+                    (sensorValues[1] * 9) / 1000,
+                    (sensorValues[2] * 9) / 1000,
+                    (sensorValues[3] * 9) / 1000,
+                    (sensorValues[4] * 9) / 1000,
+                    (sensorValues[5] * 9) / 1000,
+                    (sensorValues[6] * 9) / 1000,
+                    (sensorValues[7] * 9) / 1000);
 
                 // Zeile 2: Sensor-Counts und Signal
                 SignalType curSig = getCurrentSignal();
