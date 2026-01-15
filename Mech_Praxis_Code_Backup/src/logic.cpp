@@ -13,22 +13,15 @@ static int currentDiff = 0;
 static int lastDiff = 0;
 static int leftSideCount = 0;      // Sensoren 0,1,2,3
 static int rightSideCount = 0;     // Sensoren 4,5,6,7
-static int leftOuterSum = 0;       // Sensor 0 + 1
-static int rightOuterSum = 0;      // Sensor 6 + 7
-static int greenDiff = 0;          // leftOuterSum - rightOuterSum
 
-// --- Signal-Erkennung (zeitbasiert) ---
-static SignalType currentSignal = SIG_NONE;
-static SignalType confirmedSignal = SIG_NONE;
-static int signalDirection = 0;    // -1=Rechts, 0=Keine, 1=Links
-static unsigned long signalStartTime = 0;
-static bool signalStable = false;
+// --- 90°-Kurven Erkennung ---
+static unsigned long curveStartTime = 0;       // Timer: 0 = kein Signal, >0 = Signal erkannt
+static SignalType curveSignalType = SIG_NONE;  // LEFT oder RIGHT
+static int curveDirection = 0;                 // -1=Rechts, 1=Links, 0=Keine
 
 // --- Grün-Erkennung ---
-static bool greenDetected = false;
-static unsigned long greenStartTime = 0;
-static bool greenConfirmed = false;
-static int greenDirection = 0;
+static unsigned long greenStartTime = 0;       // Timer: 0 = kein Grün, >0 = Grün erkannt
+static int greenDirection = 0;                 // -1=Rechts, 1=Links, 0=Keine
 
 // --- Adaptiver PID ---
 static float lastError = 0;
@@ -37,8 +30,6 @@ static unsigned long lastPidTime = 0;
 // --- Smart Speed ---
 static int targetSpeed = SPEED_NORMAL;
 static float smoothedSpeed = SPEED_NORMAL;
-static bool speedReduced = false;
-static unsigned long speedReduceTime = 0;
 
 // =============================================================================
 // INITIALISIERUNG
@@ -53,19 +44,12 @@ void resetLogic() {
     lastDiff = 0;
     leftSideCount = 0;
     rightSideCount = 0;
-    leftOuterSum = 0;
-    rightOuterSum = 0;
-    greenDiff = 0;
 
-    currentSignal = SIG_NONE;
-    confirmedSignal = SIG_NONE;
-    signalDirection = 0;
-    signalStartTime = 0;
-    signalStable = false;
+    curveStartTime = 0;
+    curveSignalType = SIG_NONE;
+    curveDirection = 0;
 
-    greenDetected = false;
     greenStartTime = 0;
-    greenConfirmed = false;
     greenDirection = 0;
 
     lastError = 0;
@@ -73,8 +57,6 @@ void resetLogic() {
 
     targetSpeed = SPEED_NORMAL;
     smoothedSpeed = SPEED_NORMAL;
-    speedReduced = false;
-    speedReduceTime = 0;
 }
 
 // =============================================================================
@@ -85,13 +67,6 @@ void updateSensors() {
     readLinePosition();
 
     extern uint16_t sensorValues[8];
-
-    // Äußere Sensoren summieren
-    leftOuterSum = sensorValues[0] + sensorValues[1];
-    rightOuterSum = sensorValues[6] + sensorValues[7];
-
-    // Grün-Differenz: Positiv = Links dunkler = Grün links
-    greenDiff = leftOuterSum - rightOuterSum;
 
     // Aktive Sensoren pro Seite zählen
     leftSideCount = 0;
@@ -110,128 +85,107 @@ void updateSensors() {
 }
 
 // =============================================================================
-// GRÜN-ERKENNUNG (für T-Kreuzungen)
+// SIGNAL-ERKENNUNG (Vereinfacht)
 // =============================================================================
+
+// Helper-Funktion: Prüft ob ein Sensor-Paar grün ist
+static bool isPairGreen(int sensor1, int sensor2) {
+    int avg = (sensor1 + sensor2) / 2;
+    int diff = abs(sensor1 - sensor2);
+
+    // Bedingung 1: Durchschnitt im Grün-Bereich
+    bool avgInRange = (avg >= GREEN_VALUE_MIN && avg <= GREEN_VALUE_MAX);
+
+    // Bedingung 2: Beide Sensoren haben ähnliche Werte
+    bool valuesConsistent = (diff <= GREEN_PAIR_MAX_DIFF);
+
+    return avgInRange && valuesConsistent;
+}
 
 void updateSignalDetection() {
     unsigned long now = millis();
-    int absDiff = abs(greenDiff);
-
-    SignalType detectedSignal = SIG_NONE;
-    int detectedDirection = 0;
+    extern uint16_t sensorValues[8];
 
     // =========================================================================
-    // SCHRITT 1: GRÜN-ERKENNUNG
+    // PHASE 1: GRÜN-ERKENNUNG (höchste Priorität!)
     // =========================================================================
-    // Grün reflektiert IR anders als Weiß
-    // → Äußere Sensoren zeigen Unterschied
+    // WICHTIG: Grün markiert die Seite wo abgebogen werden soll!
+    // → Grün LINKS = biege LINKS ab
+    // → Grün RECHTS = biege RECHTS ab
 
-    if (absDiff > GREEN_DIFF_THRESHOLD) {
-        // Grün erkannt!
-        int newDir = (greenDiff > 0) ? 1 : -1;  // Positiv = Links dunkler → Links
+    // Linke Seite: Prüfe 3 Sensor-Paare auf Grün
+    bool greenLeft = isPairGreen(sensorValues[0], sensorValues[1]) ||
+                     isPairGreen(sensorValues[1], sensorValues[2]) ||
+                     isPairGreen(sensorValues[2], sensorValues[3]);
 
-        if (!greenDetected || greenDirection != newDir) {
-            // Neues Grün-Signal
-            greenDetected = true;
-            greenDirection = newDir;
+    // Rechte Seite: Prüfe 3 Sensor-Paare auf Grün
+    bool greenRight = isPairGreen(sensorValues[6], sensorValues[7]) ||
+                      isPairGreen(sensorValues[5], sensorValues[6]) ||
+                      isPairGreen(sensorValues[4], sensorValues[5]);
+
+    // Grün erkannt?
+    if ((greenLeft && !greenRight) || (greenRight && !greenLeft)) {
+        targetSpeed = SPEED_SLOW;
+
+        // Bestimme Richtung
+        int currentGreenDir = (greenLeft) ? 1 : -1;  // 1=Links, -1=Rechts
+
+        // Timer starten oder prüfen
+        if (greenStartTime == 0) {
+            // Neu erkannt → Timer starten
             greenStartTime = now;
-            greenConfirmed = false;
-
-            // Sofort langsamer werden
-            speedReduced = true;
-            speedReduceTime = now;
-            targetSpeed = SPEED_SLOW;
+            greenDirection = currentGreenDir;
         }
-        else if (!greenConfirmed && (now - greenStartTime >= GREEN_CONFIRM_MS)) {
-            // Grün ist stabil → Bestätigt!
-            greenConfirmed = true;
-            detectedSignal = (greenDirection > 0) ? SIG_CURVE_LEFT : SIG_CURVE_RIGHT;
-            detectedDirection = greenDirection;
+        else if (currentGreenDir == greenDirection && now - greenStartTime >= GREEN_CONFIRM_MS) {
+            // BESTÄTIGT! (Timer wird in main.cpp nach Abbiegung zurückgesetzt)
+            return;  // Fertig, keine 90°-Kurven Prüfung mehr
+        }
+        else if (currentGreenDir != greenDirection) {
+            // Richtung geändert → Reset
+            greenStartTime = 0;
         }
     }
-    else {
-        // Kein Grün mehr
-        if (greenDetected && !greenConfirmed) {
-            // War Fehlalarm
-            greenDetected = false;
-            greenDirection = 0;
-            speedReduced = false;
-            targetSpeed = SPEED_NORMAL;
-        }
+    else if (greenStartTime > 0) {
+        // Kein Grün mehr → Reset
+        greenStartTime = 0;
+        greenDirection = 0;
     }
 
     // =========================================================================
-    // SCHRITT 2: 90°-KURVE (ohne Grün)
+    // PHASE 2: 90°-KURVEN ERKENNUNG (nur wenn KEIN Grün!)
     // =========================================================================
-    // Nur wenn KEIN Grün erkannt wird!
+    // Einfach: 4 Sensoren auf einer Seite = 90° Kurve abbiegen
 
-    if (!greenDetected && detectedSignal == SIG_NONE) {
-        // Linkskurve: 3+ Sensoren links, wenige rechts
-        if (leftSideCount >= CURVE_MIN_SENSORS && rightSideCount <= 1) {
-            detectedSignal = SIG_CURVE_LEFT;
-            detectedDirection = 1;
+    if (leftSideCount >= CURVE_MIN_SENSORS && rightSideCount <= 1) {
+        // LINKS: 4 Sensoren links aktiv
+        targetSpeed = SPEED_SLOW;
+
+        if (curveStartTime == 0) {
+            // Neu erkannt → Timer starten
+            curveStartTime = now;
+            curveSignalType = SIG_CURVE_LEFT;
+            curveDirection = 1;  // Links
         }
-        // Rechtskurve: 3+ Sensoren rechts, wenige links
-        else if (rightSideCount >= CURVE_MIN_SENSORS && leftSideCount <= 1) {
-            detectedSignal = SIG_CURVE_RIGHT;
-            detectedDirection = -1;
-        }
+        // Timer läuft bereits (Bestätigung erfolgt in main.cpp)
     }
+    else if (rightSideCount >= CURVE_MIN_SENSORS && leftSideCount <= 1) {
+        // RECHTS: 4 Sensoren rechts aktiv
+        targetSpeed = SPEED_SLOW;
 
-    // =========================================================================
-    // SCHRITT 3: Zeitbasierte Validierung
-    // =========================================================================
-
-    if (detectedSignal != SIG_NONE) {
-        // Signal erkannt → sofort bremsen (falls nicht schon wegen Grün)
-        if (!speedReduced) {
-            speedReduced = true;
-            speedReduceTime = now;
-            targetSpeed = SPEED_SLOW;
+        if (curveStartTime == 0) {
+            // Neu erkannt → Timer starten
+            curveStartTime = now;
+            curveSignalType = SIG_CURVE_RIGHT;
+            curveDirection = -1;  // Rechts
         }
-
-        // Gleiches Signal oder neues?
-        if (detectedSignal == currentSignal && detectedDirection == signalDirection) {
-            // Signal stabil → prüfe Zeit (nur für Kurven, Grün ist schon geprüft)
-            if (!greenConfirmed && signalStartTime > 0 && !signalStable) {
-                unsigned long signalDuration = now - signalStartTime;
-                if (signalDuration >= 80) {  // 80ms für Kurven
-                    signalStable = true;
-                    confirmedSignal = currentSignal;
-                }
-            }
-            else if (greenConfirmed) {
-                // Grün wurde bestätigt
-                signalStable = true;
-                confirmedSignal = currentSignal;
-            }
-        }
-        else {
-            // Neues Signal
-            currentSignal = detectedSignal;
-            signalDirection = detectedDirection;
-            signalStartTime = now;
-            signalStable = false;
-            confirmedSignal = SIG_NONE;
-        }
+        // Timer läuft bereits (Bestätigung erfolgt in main.cpp)
     }
-    else {
-        // Kein Signal
-        if (currentSignal != SIG_NONE) {
-            currentSignal = SIG_NONE;
-            signalDirection = 0;
-            signalStartTime = 0;
-            signalStable = false;
-            confirmedSignal = SIG_NONE;
-        }
-
-        // Geschwindigkeit wiederherstellen
-        if (speedReduced && !greenDetected) {
-            if (now - speedReduceTime > 100) {
-                speedReduced = false;
-                targetSpeed = SPEED_NORMAL;
-            }
-        }
+    else if (curveStartTime > 0) {
+        // Kein Signal mehr → Reset
+        curveStartTime = 0;
+        curveSignalType = SIG_NONE;
+        curveDirection = 0;
+        targetSpeed = SPEED_NORMAL;
     }
 }
 
@@ -310,11 +264,35 @@ void updateSpeed() {
 // =============================================================================
 
 SignalType getConfirmedSignal() {
-    return confirmedSignal;
+    unsigned long now = millis();
+
+    // Grün hat Priorität
+    if (greenStartTime > 0 && now - greenStartTime >= GREEN_CONFIRM_MS) {
+        return (greenDirection == 1) ? SIG_CURVE_LEFT : SIG_CURVE_RIGHT;
+    }
+
+    // 90°-Kurven
+    if (curveStartTime > 0 && now - curveStartTime >= SIGNAL_CONFIRM_MS) {
+        return curveSignalType;
+    }
+
+    return SIG_NONE;
 }
 
 int getTurnDirection() {
-    return signalDirection;
+    unsigned long now = millis();
+
+    // Grün hat Priorität
+    if (greenStartTime > 0 && now - greenStartTime >= GREEN_CONFIRM_MS) {
+        return greenDirection;
+    }
+
+    // 90°-Kurven
+    if (curveStartTime > 0 && now - curveStartTime >= SIGNAL_CONFIRM_MS) {
+        return curveDirection;
+    }
+
+    return 0;
 }
 
 int getCurrentSpeed() {
@@ -323,10 +301,6 @@ int getCurrentSpeed() {
 
 int getSmoothedSpeed() {
     return (int)smoothedSpeed;
-}
-
-bool isSpeedReduced() {
-    return speedReduced;
 }
 
 int getSensorDiff() {
@@ -342,15 +316,11 @@ int getRightSideCount() {
 }
 
 SignalType getCurrentSignal() {
-    return currentSignal;
-}
-
-int getGreenDiff() {
-    return greenDiff;
-}
-
-bool isGreenDetected() {
-    return greenDetected;
+    // Aktuell erkanntes Signal (auch wenn noch nicht bestätigt)
+    if (greenStartTime > 0) {
+        return (greenDirection == 1) ? SIG_CURVE_LEFT : SIG_CURVE_RIGHT;
+    }
+    return curveSignalType;
 }
 
 // =============================================================================
@@ -358,15 +328,14 @@ bool isGreenDetected() {
 // =============================================================================
 
 void clearConfirmedSignal() {
-    confirmedSignal = SIG_NONE;
-    currentSignal = SIG_NONE;
-    signalDirection = 0;
-    signalStartTime = 0;
-    signalStable = false;
+    curveStartTime = 0;
+    curveSignalType = SIG_NONE;
+    curveDirection = 0;
 
-    greenDetected = false;
-    greenConfirmed = false;
+    greenStartTime = 0;
     greenDirection = 0;
+
+    targetSpeed = SPEED_NORMAL;
 }
 
 // =============================================================================
@@ -376,9 +345,9 @@ void clearConfirmedSignal() {
 const char* getSignalName(SignalType s) {
     switch (s) {
         case SIG_NONE:         return "NONE";
-        case SIG_CURVE_LEFT:   return greenConfirmed ? "T-L" : "90-L";
-        case SIG_CURVE_RIGHT:  return greenConfirmed ? "T-R" : "90-R";
-        case SIG_CROSSING:     return "KREUZ";
+        case SIG_CURVE_LEFT:   return "LEFT";
+        case SIG_CURVE_RIGHT:  return "RIGHT";
+        case SIG_CROSSING:     return "CROSS";
         default:               return "?";
     }
 }

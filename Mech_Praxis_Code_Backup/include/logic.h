@@ -32,16 +32,13 @@ void updateSpeed();                 // Smart Speed mit Rampe
 
 // ===== GETTER =====
 SignalType getConfirmedSignal();    // Bestätigtes Signal (nach Mindestzeit)
-int getTurnDirection();             // -1=Links, 0=Kein, 1=Rechts
+int getTurnDirection();             // -1=Rechts, 0=Kein, 1=Links
 int getCurrentSpeed();              // Aktuelle Zielgeschwindigkeit
 int getSmoothedSpeed();             // Geglättete Geschwindigkeit (Rampe)
-bool isSpeedReduced();              // Ist Speed gedrosselt?
 int getSensorDiff();                // Aktuelle Sensor-Differenz
 int getLeftSideCount();             // Anzahl aktiver Sensoren links (0-4)
 int getRightSideCount();            // Anzahl aktiver Sensoren rechts (0-4)
-SignalType getCurrentSignal();      // Aktuell erkanntes (noch nicht bestätigtes) Signal
-int getGreenDiff();                 // Grün-Differenz (Sensor0+1 - Sensor6+7), positiv = Grün links
-bool isGreenDetected();             // Ist gerade Grün erkannt?
+SignalType getCurrentSignal();      // Aktuell erkanntes (auch wenn noch nicht bestätigt) Signal
 
 // ===== AKTIONEN =====
 void clearConfirmedSignal();        // Signal als "behandelt" markieren

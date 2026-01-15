@@ -96,28 +96,24 @@ void runStateMachine() {
             updateSignalDetection();
 
             if (millis() - lastLcdUpdate > 200) {
+                extern uint16_t sensorValues[8];
                 char l1[17], l2[17];
+
+                // Zeile 1: Äußere Sensor-Werte (für Grün-Erkennung)
+                // Format: L0:xxx L1:xxx R6:xxx R7:xxx
+                snprintf(l1, 17, "%d %d|%d %d",
+                    sensorValues[0], sensorValues[1],
+                    sensorValues[6], sensorValues[7]);
+
+                // Zeile 2: Sensor-Counts und Signal
                 SignalType curSig = getCurrentSignal();
                 SignalType confSig = getConfirmedSignal();
-                int leftCnt = getLeftSideCount();
-                int rightCnt = getRightSideCount();
-                int greenD = getGreenDiff();
-                bool greenDet = isGreenDetected();
-
-                // Zeile 1: Sensor-Counts und Grün-Status
-                if (greenDet) {
-                    snprintf(l1, 17, "GRUEN! %d %s", greenD, (greenD > 0) ? "L" : "R");
-                } else if (curSig != SIG_NONE) {
-                    snprintf(l1, 17, "%s", getSignalName(curSig));
-                } else {
-                    snprintf(l1, 17, "L:%d R:%d", leftCnt, rightCnt);
-                }
-
-                // Zeile 2: Grün-Differenz oder Bestätigung
                 if (confSig != SIG_NONE) {
-                    snprintf(l2, 17, "OK! %s", getSignalName(confSig));
+                    snprintf(l2, 17, "%s D:%d", getSignalName(confSig), getTurnDirection());
                 } else {
-                    snprintf(l2, 17, "GDiff:%d Tot:%d", greenD, getActiveSensorCount());
+                    snprintf(l2, 17, "L:%d R:%d %s",
+                        getLeftSideCount(), getRightSideCount(),
+                        getSignalName(curSig));
                 }
 
                 lcdPrint(l1, l2);
@@ -138,6 +134,30 @@ void runLineFollower() {
     updateSensors();
     updateSignalDetection();  // Neue vereinfachte Funktion
     updateSpeed();
+
+    // Display-Update: Zeige Status
+    if (millis() - lastLcdUpdate > 200) {
+        SignalType curSig = getCurrentSignal();
+        SignalType confSig = getConfirmedSignal();
+        int leftCnt = getLeftSideCount();
+        int rightCnt = getRightSideCount();
+        char l1[17], l2[17];
+
+        // Zeile 1: Sensor-Counts
+        snprintf(l1, 17, "L:%d R:%d V:%d", leftCnt, rightCnt, getCurrentSpeed());
+
+        // Zeile 2: Signal-Status
+        if (confSig != SIG_NONE) {
+            snprintf(l2, 17, "OK! %s", getSignalName(confSig));
+        } else if (curSig != SIG_NONE) {
+            snprintf(l2, 17, "Det: %s", getSignalName(curSig));
+        } else {
+            snprintf(l2, 17, "Running...");
+        }
+
+        lcdPrint(l1, l2);
+        lastLcdUpdate = millis();
+    }
 
     // 2. Linienverlust?
     if (!isLineDetected()) {
@@ -178,16 +198,16 @@ void runLineFollower() {
 // MANÖVER
 // =============================================================================
 void executeTurn(int dir) {
-    lcdPrint("ABBIEGEN", dir < 0 ? "LINKS" : "RECHTS");
-    
+    lcdPrint("ABBIEGEN", dir > 0 ? "LINKS" : "RECHTS");
+
     // Vorfahren
     executeSteps(STEPS_BEFORE_TURN, STEPS_BEFORE_TURN, SPEED_TURN);
     delay(30);
-    
+
     // Drehen
-    if (dir < 0) executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);
-    else         executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);
-    
+    if (dir > 0) executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);  // Links
+    else         executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);  // Rechts
+
     delay(30);
 }
 

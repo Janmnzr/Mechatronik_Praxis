@@ -32,7 +32,7 @@
 #define QTR_PIN_7       A14
 #define QTR_PIN_8       A15
 #define NUM_SENSORS     8
-#define QTR_EMITTER_PIN 44      // IR-LED Emitter
+#define QTR_EMITTER_PIN 4   // IR-LED Emitter
 
 // ===== LCD KEYPAD SHIELD =====
 #define LCD_RS          8
@@ -51,8 +51,8 @@
 // =============================================================================
 
 #define SPEED_MAX       800     // Maximale Geschwindigkeit
-#define SPEED_NORMAL    400     // Normale Linienfolge-Geschwindigkeit
-#define SPEED_SLOW      260     // Reduzierte Geschwindigkeit bei Grün-Erkennung (66%)
+#define SPEED_NORMAL    300   // Normale Linienfolge-Geschwindigkeit
+#define SPEED_SLOW      200   // Reduzierte Geschwindigkeit bei Grün-Erkennung (66%)
 #define SPEED_TURN      200     // Geschwindigkeit für 90°-Drehungen
 
 // ===== BESCHLEUNIGUNG =====
@@ -95,17 +95,22 @@
 // =============================================================================
 
 // --- 90°-KURVEN (ohne Grün) ---
-#define CURVE_MIN_SENSORS   3       // Mind. 3 von 4 Sensoren auf einer Seite
+#define CURVE_MIN_SENSORS   4       // Mind. 4 von 4 Sensoren auf einer Seite
 
 // --- T-KREUZUNG MIT GRÜN ---
-// Grün reflektiert IR anders als Weiß → äußere Sensoren zeigen Unterschied
-// Diff = (Sensor0 + Sensor1) - (Sensor6 + Sensor7)
-// Positiv = Links dunkler (Grün links) → Links abbiegen
-// Negativ = Rechts dunkler (Grün rechts) → Rechts abbiegen
-#define GREEN_DIFF_THRESHOLD  300   // Ab dieser Diff = Grün erkannt
-#define GREEN_CONFIRM_MS      100   // Grün muss 100ms stabil sein
+// Grün reflektiert weniger IR als Weiß → niedrigere Sensor-Werte (100-300)
+// NEUE METHODE: Prüfe Sensor-Paare auf absolute Werte
+// - Linke Seite: Paare (0+1), (1+2), (2+3)
+// - Rechte Seite: Paare (6+7), (5+6), (4+5)
+// - Grün erkannt wenn: Paar-Durchschnitt im Bereich UND beide Sensoren ähnlich
+#define GREEN_VALUE_MIN       100   // Minimaler Sensor-Wert für Grün
+#define GREEN_VALUE_MAX       300   // Maximaler Sensor-Wert für Grün
+#define GREEN_PAIR_MAX_DIFF   100   // Max. Differenz zwischen zwei Sensoren eines Paares
+#define JUNCTION_MIN_SENSORS  3     // Mind. 3 Sensoren pro Seite für breite Kreuzung
 
 // --- TIMING ---
+#define GREEN_CONFIRM_MS    100     // Bestätigungszeit für Grün-Erkennung
+#define SIGNAL_CONFIRM_MS   80      // Bestätigungszeit für geometrische Signale
 #define TURN_COOLDOWN_MS    1500    // Pause zwischen Abbiegungen
 
 // =============================================================================
