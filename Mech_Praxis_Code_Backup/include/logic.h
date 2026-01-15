@@ -20,6 +20,13 @@ enum SignalType {
     SIG_CROSSING         // Viele Sensoren aktiv
 };
 
+// ===== SIGNAL-GRUND =====
+enum SignalReason {
+    REASON_NONE = 0,
+    REASON_GREEN,        // Grün erkannt
+    REASON_90_CURVE      // 90°-Kurve (schwarz) erkannt
+};
+
 // ===== INITIALISIERUNG =====
 void initLogic();                   // Einmalig bei Start
 void resetLogic();                  // Bei Neustart Linienfolger
@@ -32,6 +39,7 @@ void updateSpeed();                 // Smart Speed mit Rampe
 
 // ===== GETTER =====
 SignalType getConfirmedSignal();    // Bestätigtes Signal (nach Mindestzeit)
+SignalReason getSignalReason();     // Grund für Signal (Grün oder 90°-Kurve)
 int getTurnDirection();             // -1=Rechts, 0=Kein, 1=Links
 int getCurrentSpeed();              // Aktuelle Zielgeschwindigkeit
 int getSmoothedSpeed();             // Geglättete Geschwindigkeit (Rampe)
@@ -45,5 +53,6 @@ void clearConfirmedSignal();        // Signal als "behandelt" markieren
 
 // ===== DEBUG =====
 const char* getSignalName(SignalType s);
+const char* getReasonName(SignalReason r);
 
 #endif // LOGIC_H

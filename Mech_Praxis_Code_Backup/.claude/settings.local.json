@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(C:UsersSami.platformiopenvScriptsplatformio.exe run)"
+      "Bash(C:UsersSami.platformiopenvScriptsplatformio.exe run)",
+      "Bash(\"C:\\\\Users\\\\Sami\\\\.platformio\\\\penv\\\\Scripts\\\\platformio.exe\" run)",
+      "Bash(\"C:\\\\Users\\\\Sami\\\\.platformio\\\\penv\\\\Scripts\\\\platformio.exe\" run --target upload)"
     ]
   }
 }

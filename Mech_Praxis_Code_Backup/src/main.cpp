@@ -26,7 +26,7 @@ static unsigned long lastLcdUpdate = 0;
 // ===== VORWÄRTS-DEKLARATIONEN =====
 void runStateMachine();
 void runLineFollower();
-void executeTurn(int direction);
+void executeTurn(int direction, SignalReason reason);
 bool searchLine();
 void handleMenu();
 void executeMenu(Menu item);
@@ -113,8 +113,9 @@ void runStateMachine() {
                 // Zeile 2: Sensor-Counts und Signal
                 SignalType curSig = getCurrentSignal();
                 SignalType confSig = getConfirmedSignal();
+                SignalReason reason = getSignalReason();
                 if (confSig != SIG_NONE) {
-                    snprintf(l2, 17, "%s D:%d", getSignalName(confSig), getTurnDirection());
+                    snprintf(l2, 17, "%s %s D:%d", getSignalName(confSig), getReasonName(reason), getTurnDirection());
                 } else {
                     snprintf(l2, 17, "L:%d R:%d %s",
                         getLeftSideCount(), getRightSideCount(),
@@ -144,6 +145,7 @@ void runLineFollower() {
     if (millis() - lastLcdUpdate > 200) {
         SignalType curSig = getCurrentSignal();
         SignalType confSig = getConfirmedSignal();
+        SignalReason reason = getSignalReason();
         int leftCnt = getLeftSideCount();
         int rightCnt = getRightSideCount();
         char l1[17], l2[17];
@@ -151,9 +153,9 @@ void runLineFollower() {
         // Zeile 1: Sensor-Counts
         snprintf(l1, 17, "L:%d R:%d V:%d", leftCnt, rightCnt, getCurrentSpeed());
 
-        // Zeile 2: Signal-Status
+        // Zeile 2: Signal-Status mit Grund
         if (confSig != SIG_NONE) {
-            snprintf(l2, 17, "OK! %s", getSignalName(confSig));
+            snprintf(l2, 17, "OK! %s %s", getSignalName(confSig), getReasonName(reason));
         } else if (curSig != SIG_NONE) {
             snprintf(l2, 17, "Det: %s", getSignalName(curSig));
         } else {
@@ -183,10 +185,11 @@ void runLineFollower() {
     SignalType sig = getConfirmedSignal();
     if (sig != SIG_NONE && (millis() - lastTurnTime > TURN_COOLDOWN_MS)) {
         int dir = getTurnDirection();
+        SignalReason reason = getSignalReason();
 
         if (dir != 0) {
             mode = MODE_MANEUVERING;
-            executeTurn(dir);
+            executeTurn(dir, reason);
             mode = MODE_RUNNING;
             lastTurnTime = millis();
             clearConfirmedSignal();  // Neue Funktion
@@ -202,16 +205,23 @@ void runLineFollower() {
 // =============================================================================
 // MANÖVER
 // =============================================================================
-void executeTurn(int dir) {
-    lcdPrint("ABBIEGEN", dir > 0 ? "LINKS" : "RECHTS");
+void executeTurn(int dir, SignalReason reason) {
+    char line2[17];
+    const char* dirText = (dir > 0) ? "LINKS" : "RECHTS";
+    snprintf(line2, 17, "%s %s", dirText, getReasonName(reason));
+    lcdPrint("ABBIEGEN", line2);
 
-    // Vorfahren
-    executeSteps(STEPS_BEFORE_TURN, STEPS_BEFORE_TURN, SPEED_TURN);
+    // Vorfahren - bei Grün 2cm mehr (7cm statt 5cm)
+    int stepsForward = STEPS_BEFORE_TURN;
+    if (reason == REASON_GREEN) {
+        stepsForward = STEPS_BEFORE_TURN + (2 * STEPS_PER_CM);  // +2cm für Grün
+    }
+    executeSteps(stepsForward, stepsForward, SPEED_TURN);
     delay(30);
 
-    // Drehen
-    if (dir > 0) executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);  // Links
-    else         executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);  // Rechts
+    // Drehen (Richtungen vertauscht wegen Motor-Orientierung)
+    if (dir > 0) executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);  // Links
+    else         executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);  // Rechts
 
     delay(30);
 }
