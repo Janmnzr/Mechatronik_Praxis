@@ -51,9 +51,9 @@
 // =============================================================================
 
 #define SPEED_MAX       800     // Maximale Geschwindigkeit
-#define SPEED_NORMAL    300   // Normale Linienfolge-Geschwindigkeit
-#define SPEED_SLOW      200   // Reduzierte Geschwindigkeit bei Grün-Erkennung (66%)
-#define SPEED_TURN      200     // Geschwindigkeit für 90°-Drehungen
+#define SPEED_NORMAL    450   // Normale Linienfolge-Geschwindigkeit
+#define SPEED_SLOW      350   // Reduzierte Geschwindigkeit bei Grün-Erkennung (66%)
+#define SPEED_TURN      350     // Geschwindigkeit für 90°-Drehungen
 
 // ===== BESCHLEUNIGUNG =====
 #define ACCELERATION    800     // Steps/s² (sanfter Start)
@@ -66,7 +66,6 @@
 // =============================================================================
 
 #define PID_KP          0.15f   // Proportional (Reaktionsstärke)
-#define PID_KI          0.0f    // Integral (nicht verwendet)
 #define PID_KD          0.4f    // Differential (Dämpfung) - reduziert für weniger Ruckeln
 #define PID_DEADZONE    150     // Fehler unter diesem Wert = ignorieren - erhöht für sanftere Fahrt
 
@@ -106,7 +105,6 @@
 #define GREEN_VALUE_MIN       120   // Minimaler Sensor-Wert für Grün (erhöht gegen Fehlalarme)
 #define GREEN_VALUE_MAX       280   // Maximaler Sensor-Wert für Grün (reduziert gegen Fehlalarme)
 #define GREEN_PAIR_MAX_DIFF   80    // Max. Differenz zwischen zwei Sensoren eines Paares (reduziert)
-#define JUNCTION_MIN_SENSORS  3     // Mind. 3 Sensoren pro Seite für breite Kreuzung
 
 // --- TIMING ---
 #define GREEN_CONFIRM_MS    200     // Bestätigungszeit für Grün-Erkennung (erhöht gegen Fehlalarme)
@@ -131,15 +129,10 @@
 // TIMING
 // =============================================================================
 
-#define TURN_COOLDOWN_MS    1500    // Pause zwischen Abbiegungen
-#define LCD_UPDATE_MS       500     // LCD-Aktualisierung (nur im STOPPED/DEBUG)
-#define SEARCH_TIMEOUT_MS   5000    // Max. Zeit für Liniensuche
-
 // =============================================================================
 // DEBUG (ausschalten für Performance!)
 // =============================================================================
 
 #define DEBUG_SERIAL        false   // true = Serial-Ausgaben aktiv
-#define DEBUG_LCD_RUNNING   false   // true = LCD während Fahrt aktualisieren
 
 #endif // CONFIG_H

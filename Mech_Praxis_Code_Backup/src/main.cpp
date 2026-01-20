@@ -146,12 +146,10 @@ void runLineFollower() {
         SignalType curSig = getCurrentSignal();
         SignalType confSig = getConfirmedSignal();
         SignalReason reason = getSignalReason();
-        int leftCnt = getLeftSideCount();
-        int rightCnt = getRightSideCount();
         char l1[17], l2[17];
 
-        // Zeile 1: Sensor-Counts
-        snprintf(l1, 17, "L:%d R:%d V:%d", leftCnt, rightCnt, getCurrentSpeed());
+        // Zeile 1: Nur Geschwindigkeit
+        snprintf(l1, 17, "Speed: %d", getCurrentSpeed());
 
         // Zeile 2: Signal-Status mit Grund
         if (confSig != SIG_NONE) {
@@ -159,7 +157,7 @@ void runLineFollower() {
         } else if (curSig != SIG_NONE) {
             snprintf(l2, 17, "Det: %s", getSignalName(curSig));
         } else {
-            snprintf(l2, 17, "Running...");
+            snprintf(l2, 17, "");
         }
 
         lcdPrint(l1, l2);

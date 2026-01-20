@@ -51,27 +51,14 @@ void executeSteps(int leftSteps, int rightSteps, int speed);
 void initSensors();                         // QTR initialisieren
 void calibrateSensors();                    // 3 Sekunden Kalibrierung
 int readLinePosition();                     // Position 0-7000 lesen
-int getActiveSensorCount();                 // Anzahl Sensoren > Threshold
 bool isLineDetected();                      // Mindestens 1 Sensor > Threshold
-
-// Rohe Sensor-Werte (für Differenz-Berechnung)
-int getLeftSensorAvg();                     // Durchschnitt S0 + S1
-int getRightSensorAvg();                    // Durchschnitt S6 + S7
 
 // =============================================================================
 // LCD FUNKTIONEN (dumm - nur Hardware-Zugriff)
 // =============================================================================
 
 void initLCD();                             // LCD 16x2 initialisieren
-void lcdClear();                            // Display löschen
 void lcdPrint(const char* line1, const char* line2 = nullptr);
-void lcdPrintNum(const char* label, int value);  // "Label: 123"
 Button readButton();                        // Button mit Entprellung lesen
-
-// =============================================================================
-// HILFSFUNKTIONEN
-// =============================================================================
-
-void blinkLED(int count, int delayMs = 100);
 
 #endif // HARDWARE_H

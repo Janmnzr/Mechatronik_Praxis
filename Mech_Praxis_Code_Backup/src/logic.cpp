@@ -394,7 +394,6 @@ const char* getSignalName(SignalType s) {
         case SIG_NONE:         return "NONE";
         case SIG_CURVE_LEFT:   return "LEFT";
         case SIG_CURVE_RIGHT:  return "RIGHT";
-        case SIG_CROSSING:     return "CROSS";
         default:               return "?";
     }
 }

@@ -167,27 +167,11 @@ int readLinePosition() {
     return qtr.readLineBlack(sensorValues);
 }
 
-int getActiveSensorCount() {
-    int count = 0;
-    for (uint8_t i = 0; i < NUM_SENSORS; i++) {
-        if (sensorValues[i] > LINE_THRESHOLD) count++;
-    }
-    return count;
-}
-
 bool isLineDetected() {
     for (uint8_t i = 0; i < NUM_SENSORS; i++) {
         if (sensorValues[i] > LINE_THRESHOLD) return true;
     }
     return false;
-}
-
-int getLeftSensorAvg() {
-    return (sensorValues[0] + sensorValues[1]) / 2;
-}
-
-int getRightSensorAvg() {
-    return (sensorValues[6] + sensorValues[7]) / 2;
 }
 
 // =============================================================================
@@ -203,10 +187,6 @@ void initLCD() {
     lcdPrint("LINIENFOLGER V3", "Initialisiere...");
 }
 
-void lcdClear() {
-    lcd.clear();
-}
-
 void lcdPrint(const char* line1, const char* line2) {
     lcd.clear();
 
@@ -219,12 +199,6 @@ void lcdPrint(const char* line1, const char* line2) {
         lcd.setCursor(0, 1);
         lcd.print(line2);
     }
-}
-
-void lcdPrintNum(const char* label, int value) {
-    char line2[17];
-    snprintf(line2, 17, "%d", value);
-    lcdPrint(label, line2);
 }
 
 Button readButton() {
@@ -246,20 +220,6 @@ Button readButton() {
     if (adc < 400) return BTN_DOWN;
     if (adc < 600) return BTN_LEFT;
     if (adc < 800) return BTN_SELECT;
-    
+
     return BTN_NONE;
-}
-
-// =============================================================================
-// HILFSFUNKTIONEN
-// =============================================================================
-
-void blinkLED(int count, int delayMs) {
-    pinMode(LED_BUILTIN, OUTPUT);
-    for (int i = 0; i < count; i++) {
-        digitalWrite(LED_BUILTIN, HIGH);
-        delay(delayMs);
-        digitalWrite(LED_BUILTIN, LOW);
-        delay(delayMs);
-    }
 }

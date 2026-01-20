@@ -16,8 +16,7 @@
 enum SignalType {
     SIG_NONE = 0,
     SIG_CURVE_LEFT,      // Große Diff nach links
-    SIG_CURVE_RIGHT,     // Große Diff nach rechts
-    SIG_CROSSING         // Viele Sensoren aktiv
+    SIG_CURVE_RIGHT      // Große Diff nach rechts
 };
 
 // ===== SIGNAL-GRUND =====
