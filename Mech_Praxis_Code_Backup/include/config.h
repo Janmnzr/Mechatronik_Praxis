@@ -2,7 +2,7 @@
 #define CONFIG_H
 
 // =============================================================================
-// LINIENFOLGER V3 - VEREINFACHTE KONFIGURATION
+// LINIENFOLGER V3 - ERWEITERTE KONFIGURATION MIT BALLSUCHE
 // =============================================================================
 // Alle Einstellungen an EINEM Ort. Keine versteckten Werte!
 // =============================================================================
@@ -34,15 +34,28 @@
 #define NUM_SENSORS     8
 #define QTR_EMITTER_PIN 4   // IR-LED Emitter
 
-// ===== LCD KEYPAD SHIELD =====
-#define LCD_RS          8
-#define LCD_E           9
-#define LCD_D4          4
-#define LCD_D5          5
-#define LCD_D6          6
-#define LCD_D7          7
-#define LCD_BACKLIGHT   10
-#define LCD_BUTTONS     A0
+// =============================================================================
+// I2C MULTIPLEXER (TCA9548A)
+// =============================================================================
+// SDA = Pin 20, SCL = Pin 21 (Arduino Mega)
+// =============================================================================
+
+#define MUX_ADDRESS     0x70    // Standard I2C Adresse TCA9548A
+#define MUX_CHANNEL_DISPLAY  1  // SD1/SC1 - LCD Display (0x27)
+#define MUX_CHANNEL_LASER    3  // SD3/SC3 - VL53L1X Laser (0x29)
+#define MUX_CHANNEL_RGB      4  // SD4/SC4 - TCS34725 RGB (0x29)
+
+// ===== LCD I2C (über Multiplexer) =====
+#define LCD_I2C_ADDRESS 0x27    // Standard PCF8574 I2C Adresse (ggf. 0x3F probieren)
+#define LCD_COLS        16
+#define LCD_ROWS        2
+
+// ===== NEUE BUTTON PINS (Schalten Masse durch) =====
+// Buttons sind mit INPUT_PULLUP konfiguriert, LOW = gedrückt
+#define BTN_DOWN_PIN    A0
+#define BTN_UP_PIN      A1
+#define BTN_SELECT_PIN  A3
+// Reset ist direkt mit Arduino Reset verbunden
 
 // =============================================================================
 // GESCHWINDIGKEITEN (Steps/Sekunde)
@@ -51,9 +64,11 @@
 // =============================================================================
 
 #define SPEED_MAX       800     // Maximale Geschwindigkeit
-#define SPEED_NORMAL    450   // Normale Linienfolge-Geschwindigkeit
-#define SPEED_SLOW      350   // Reduzierte Geschwindigkeit bei Grün-Erkennung (66%)
+#define SPEED_NORMAL    450     // Normale Linienfolge-Geschwindigkeit
+#define SPEED_SLOW      350     // Reduzierte Geschwindigkeit bei Grün-Erkennung (66%)
 #define SPEED_TURN      350     // Geschwindigkeit für 90°-Drehungen
+#define SPEED_SEARCH    200     // Geschwindigkeit für Ballsuche-Drehung
+#define SPEED_APPROACH  250     // Geschwindigkeit beim Anfahren des Balls
 
 // ===== BESCHLEUNIGUNG =====
 #define ACCELERATION    800     // Steps/s² (sanfter Start)
@@ -61,13 +76,10 @@
 // =============================================================================
 // PID-REGLER
 // =============================================================================
-// Der PID regelt NORMALE Linienfolge und LEICHTE Kurven (bis ~45°)
-// Für 90° und Kreuzungen übernimmt die State-Machine
-// =============================================================================
 
 #define PID_KP          0.15f   // Proportional (Reaktionsstärke)
-#define PID_KD          0.4f    // Differential (Dämpfung) - reduziert für weniger Ruckeln
-#define PID_DEADZONE    150     // Fehler unter diesem Wert = ignorieren - erhöht für sanftere Fahrt
+#define PID_KD          0.4f    // Differential (Dämpfung)
+#define PID_DEADZONE    150     // Fehler unter diesem Wert = ignorieren
 
 // =============================================================================
 // SENSOR-SCHWELLWERTE
@@ -77,57 +89,64 @@
 #define LINE_CENTER     3500    // Mitte der Linie (0-7000 Bereich)
 
 // =============================================================================
-// SIGNAL-ERKENNUNG (Zeitbasiert)
+// ROTE LINIE ERKENNUNG (Parkour-Ende)
 // =============================================================================
-// VEREINFACHTE LOGIK:
-// 1. Signal erkannt (Kurve/Kreuzung) → sofort bremsen
-// 2. Signal bleibt stabil für SIGNAL_CONFIRM_MS → bestätigt → reagieren
-// 3. Signal verschwindet vorher → Fehlalarm → weiterfahren
-//
-// FALL 1: 90°-KURVE
-//         Erkennung: Große Differenz (600-1100)
-//         Richtung:  Direkt aus Diff (+Diff = Links, -Diff = Rechts)
-//
-// FALL 2: KREUZUNG
-//         Erkennung: Viele Sensoren aktiv (≥6)
-//         Richtung:  Aus aktueller Diff beim Erkennen
+// Rote Querlinie: Sensoren zeigen niedrige Werte (100-250)
+// Im Gegensatz zu Schwarz (>750) und Weiß (<50)
+// =============================================================================
+
+#define RED_LINE_MIN        80      // Minimaler Wert für Rot-Erkennung
+#define RED_LINE_MAX        300     // Maximaler Wert für Rot-Erkennung
+#define RED_LINE_MIN_SENSORS 5      // Mindestens 5 Sensoren müssen im Bereich sein
+#define RED_LINE_CONFIRM_MS  100    // Bestätigungszeit für rote Linie
+
+// =============================================================================
+// SIGNAL-ERKENNUNG (Zeitbasiert)
 // =============================================================================
 
 // --- 90°-KURVEN (ohne Grün) ---
-#define CURVE_MIN_SENSORS   3       // Mind. 3 Sensoren auf einer Seite (gelockert von 4)
+#define CURVE_MIN_SENSORS   3       // Mind. 3 Sensoren auf einer Seite
 
 // --- T-KREUZUNG MIT GRÜN ---
-// Grün reflektiert weniger IR als Weiß → niedrigere Sensor-Werte (100-300)
-// NEUE METHODE: Prüfe Sensor-Paare auf absolute Werte
-// - Linke Seite: Paare (0+1), (1+2), (2+3)
-// - Rechte Seite: Paare (6+7), (5+6), (4+5)
-// - Grün erkannt wenn: Paar-Durchschnitt im Bereich UND beide Sensoren ähnlich
-#define GREEN_VALUE_MIN       120   // Minimaler Sensor-Wert für Grün (erhöht gegen Fehlalarme)
-#define GREEN_VALUE_MAX       280   // Maximaler Sensor-Wert für Grün (reduziert gegen Fehlalarme)
-#define GREEN_PAIR_MAX_DIFF   80    // Max. Differenz zwischen zwei Sensoren eines Paares (reduziert)
+#define GREEN_VALUE_MIN       120   // Minimaler Sensor-Wert für Grün
+#define GREEN_VALUE_MAX       280   // Maximaler Sensor-Wert für Grün
+#define GREEN_PAIR_MAX_DIFF   80    // Max. Differenz zwischen zwei Sensoren eines Paares
 
 // --- TIMING ---
-#define GREEN_CONFIRM_MS    200     // Bestätigungszeit für Grün-Erkennung (erhöht gegen Fehlalarme)
-#define SIGNAL_CONFIRM_MS   150     // Bestätigungszeit für geometrische Signale (erhöht gegen Fehlalarme)
+#define GREEN_CONFIRM_MS    200     // Bestätigungszeit für Grün-Erkennung
+#define SIGNAL_CONFIRM_MS   150     // Bestätigungszeit für geometrische Signale
 #define TURN_COOLDOWN_MS    1500    // Pause zwischen Abbiegungen
+
+// =============================================================================
+// BALLSUCHE KONFIGURATION
+// =============================================================================
+
+// --- VL53L1X LASER SENSOR ---
+#define LASER_TIMING_BUDGET_MS  50      // Messzeit (höher = genauer)
+#define LASER_MAX_RANGE_MM      1200    // Maximale Reichweite
+#define LASER_BALL_DETECT_JUMP  100     // Sprung in mm der Ball signalisiert
+#define LASER_BALL_MIN_DIST     30      // Minimale Ball-Distanz in mm
+#define LASER_BALL_MAX_DIST     500     // Maximale Ball-Distanz in mm
+#define LASER_TARGET_DIST       50      // Zieldistanz zum Ball in mm (Greifer-Position)
+#define LASER_APPROACH_TOLERANCE 10     // Toleranz beim Anfahren (+/- mm)
+
+// --- TCS34725 RGB SENSOR ---
+#define RGB_INTEGRATION_TIME    50      // Integrationszeit in ms
+#define RGB_GAIN                4       // Gain (1, 4, 16, 60)
+
+// --- BALLSUCHE TIMING ---
+#define SEARCH_ROTATION_STEP_MS 100     // Zeit pro Rotationsschritt
+#define SEARCH_SCAN_SAMPLES     5       // Anzahl Samples pro Messposition
+#define SEARCH_MAX_ROTATIONS    2       // Maximale volle Umdrehungen
 
 // =============================================================================
 // MANÖVER-KONSTANTEN (berechnet aus Mechanik)
 // =============================================================================
-// Raddurchmesser: 8cm → Umfang = π * 8 = 25.13cm
-// Radabstand: 13.5cm → 90°-Drehkreis = π * 13.5 / 4 = 10.6cm
-// Steps/Umdrehung: 200 * 8 (Microstepping) = 1600
-// Steps/cm: 1600 / 25.13 ≈ 64
-// =============================================================================
 
 #define STEPS_PER_CM        64
 #define STEPS_90_DEGREE     680     // 90°-Drehung
-#define STEPS_BEFORE_TURN   320     // 5cm vorfahren vor Drehung (Radachse auf Kreuzung)
+#define STEPS_BEFORE_TURN   320     // 5cm vorfahren vor Drehung
 #define STEPS_BACKWARD      128     // 2cm zurück bei Linienverlust
-
-// =============================================================================
-// TIMING
-// =============================================================================
 
 // =============================================================================
 // DEBUG (ausschalten für Performance!)

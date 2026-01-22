@@ -2,29 +2,55 @@
 #include "config.h"
 
 // =============================================================================
-// HARDWARE.CPP - Implementierung aller Hardware-Funktionen
+// HARDWARE.CPP - VL53L0X und TCS34725 ohne Adafruit
 // =============================================================================
 
 // ===== GLOBALE OBJEKTE =====
 QTRSensors qtr;
 AccelStepper motorL(AccelStepper::DRIVER, STEP_PIN_L, DIR_PIN_L);
 AccelStepper motorR(AccelStepper::DRIVER, STEP_PIN_R, DIR_PIN_R);
-LiquidCrystal lcd(LCD_RS, LCD_E, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, LCD_COLS, LCD_ROWS);
+VL53L0X laser;
 uint16_t sensorValues[NUM_SENSORS];
 
 // ===== PRIVATE VARIABLEN =====
 static unsigned long lastButtonPress = 0;
+static bool laserInitialized = false;
+static bool rgbInitialized = false;
+
+// =============================================================================
+// I2C MULTIPLEXER FUNKTIONEN
+// =============================================================================
+
+void initMultiplexer() {
+    Wire.begin();
+    Wire.setClock(100000);  // 100kHz für Stabilität
+    disableMux();
+    delay(10);
+}
+
+void selectMuxChannel(uint8_t channel) {
+    if (channel > 7) return;
+    Wire.beginTransmission(MUX_ADDRESS);
+    Wire.write(1 << channel);
+    Wire.endTransmission();
+    delay(5);
+}
+
+void disableMux() {
+    Wire.beginTransmission(MUX_ADDRESS);
+    Wire.write(0);
+    Wire.endTransmission();
+}
 
 // =============================================================================
 // MOTOR FUNKTIONEN
 // =============================================================================
 
 void initMotors() {
-    // Enable Pin
     pinMode(ENABLE_PIN, OUTPUT);
-    digitalWrite(ENABLE_PIN, HIGH);  // Erstmal deaktiviert
+    digitalWrite(ENABLE_PIN, HIGH);
     
-    // Microstepping Pins (1/8 = HIGH HIGH LOW)
     pinMode(MS1_PIN_1, OUTPUT);
     pinMode(MS2_PIN_1, OUTPUT);
     pinMode(MS3_PIN_1, OUTPUT);
@@ -39,7 +65,6 @@ void initMotors() {
     digitalWrite(MS2_PIN_2, HIGH);
     digitalWrite(MS3_PIN_2, LOW);
     
-    // Motor-Konfiguration
     motorL.setPinsInverted(true, false, false);
     motorR.setPinsInverted(true, false, false);
     
@@ -96,8 +121,7 @@ void executeSteps(int leftSteps, int rightSteps, int speed) {
     long startR = motorR.currentPosition();
 
     while (true) {
-        // Notfall-Stopp: LEFT-Taste prüfen
-        if (readButton() == BTN_LEFT) {
+        if (readButton() == BTN_SELECT) {
             stopMotors();
             return;
         }
@@ -122,11 +146,9 @@ void executeSteps(int leftSteps, int rightSteps, int speed) {
 // =============================================================================
 
 void initSensors() {
-    // IR-Emitter aktivieren
     pinMode(QTR_EMITTER_PIN, OUTPUT);
     digitalWrite(QTR_EMITTER_PIN, HIGH);
     
-    // Sensor-Pins konfigurieren
     uint8_t pins[] = {
         QTR_PIN_1, QTR_PIN_2, QTR_PIN_3, QTR_PIN_4,
         QTR_PIN_5, QTR_PIN_6, QTR_PIN_7, QTR_PIN_8
@@ -142,12 +164,10 @@ void calibrateSensors() {
     
     pinMode(LED_BUILTIN, OUTPUT);
     
-    // 3 Sekunden kalibrieren (150 * 20ms)
     for (uint16_t i = 0; i < 150; i++) {
         qtr.calibrate();
-        digitalWrite(LED_BUILTIN, (i / 20) % 2);  // Blinken
+        digitalWrite(LED_BUILTIN, (i / 20) % 2);
         
-        // LCD-Countdown
         if (i % 50 == 0) {
             int secs = 3 - (i / 50);
             char buf[17];
@@ -179,15 +199,19 @@ bool isLineDetected() {
 // =============================================================================
 
 void initLCD() {
-    lcd.begin(16, 2);
-
-    pinMode(LCD_BACKLIGHT, OUTPUT);
-    digitalWrite(LCD_BACKLIGHT, HIGH);
-
-    lcdPrint("LINIENFOLGER V3", "Initialisiere...");
+    selectMuxChannel(MUX_CHANNEL_DISPLAY);
+    delay(50);
+    
+    lcd.init();
+    lcd.backlight();
+    lcd.clear();
+    
+    lcdPrint("LINIENFOLGER V3", "Mit Ballsuche!");
 }
 
 void lcdPrint(const char* line1, const char* line2) {
+    selectMuxChannel(MUX_CHANNEL_DISPLAY);
+    
     lcd.clear();
 
     if (line1 != nullptr) {
@@ -201,25 +225,217 @@ void lcdPrint(const char* line1, const char* line2) {
     }
 }
 
+void lcdClear() {
+    selectMuxChannel(MUX_CHANNEL_DISPLAY);
+    lcd.clear();
+}
+
+// =============================================================================
+// BUTTON FUNKTIONEN
+// =============================================================================
+
+void initButtons() {
+    pinMode(BTN_DOWN_PIN, INPUT_PULLUP);
+    pinMode(BTN_UP_PIN, INPUT_PULLUP);
+    pinMode(BTN_SELECT_PIN, INPUT_PULLUP);
+}
+
 Button readButton() {
-    int adc = analogRead(LCD_BUTTONS);
-    
-    // Entprellung: 200ms
     if (millis() - lastButtonPress < 200) {
         return BTN_NONE;
     }
     
-    // Keine Taste
-    if (adc > 1000) return BTN_NONE;
+    if (digitalRead(BTN_DOWN_PIN) == LOW) {
+        lastButtonPress = millis();
+        return BTN_DOWN;
+    }
     
-    lastButtonPress = millis();
+    if (digitalRead(BTN_UP_PIN) == LOW) {
+        lastButtonPress = millis();
+        return BTN_UP;
+    }
     
-    // Taste erkennen (mit Toleranz)
-    if (adc < 60)  return BTN_RIGHT;
-    if (adc < 200) return BTN_UP;
-    if (adc < 400) return BTN_DOWN;
-    if (adc < 600) return BTN_LEFT;
-    if (adc < 800) return BTN_SELECT;
+    if (digitalRead(BTN_SELECT_PIN) == LOW) {
+        lastButtonPress = millis();
+        return BTN_SELECT;
+    }
 
     return BTN_NONE;
+}
+
+// =============================================================================
+// VL53L0X LASER SENSOR (Pololu Library)
+// =============================================================================
+
+bool initLaser() {
+    selectMuxChannel(MUX_CHANNEL_LASER);
+    delay(50);
+    
+    laser.setTimeout(500);
+    
+    if (!laser.init()) {
+        laserInitialized = false;
+        return false;
+    }
+    
+    // High speed mode für schnellere Messungen
+    laser.setMeasurementTimingBudget(20000);  // 20ms
+    
+    laserInitialized = true;
+    return true;
+}
+
+uint16_t readLaserDistance() {
+    if (!laserInitialized) return 0;
+    
+    selectMuxChannel(MUX_CHANNEL_LASER);
+    delay(5);
+    
+    uint16_t distance = laser.readRangeSingleMillimeters();
+    
+    if (laser.timeoutOccurred()) {
+        return 0;
+    }
+    
+    return distance;
+}
+
+bool isLaserReady() {
+    return laserInitialized;
+}
+
+// =============================================================================
+// TCS34725 RGB SENSOR (Manuell ohne Adafruit)
+// =============================================================================
+
+static void tcsWrite8(uint8_t reg, uint8_t value) {
+    Wire.beginTransmission(TCS34725_ADDRESS);
+    Wire.write(TCS34725_COMMAND | reg);
+    Wire.write(value);
+    Wire.endTransmission();
+}
+
+static uint8_t tcsRead8(uint8_t reg) {
+    Wire.beginTransmission(TCS34725_ADDRESS);
+    Wire.write(TCS34725_COMMAND | reg);
+    Wire.endTransmission();
+    
+    Wire.requestFrom(TCS34725_ADDRESS, (uint8_t)1);
+    return Wire.read();
+}
+
+static uint16_t tcsRead16(uint8_t reg) {
+    Wire.beginTransmission(TCS34725_ADDRESS);
+    Wire.write(TCS34725_COMMAND | reg);
+    Wire.endTransmission();
+    
+    Wire.requestFrom(TCS34725_ADDRESS, (uint8_t)2);
+    uint16_t low = Wire.read();
+    uint16_t high = Wire.read();
+    return (high << 8) | low;
+}
+
+bool initRgbSensor() {
+    selectMuxChannel(MUX_CHANNEL_RGB);
+    delay(50);
+    
+    // ID prüfen (sollte 0x44 oder 0x4D sein)
+    uint8_t id = tcsRead8(TCS34725_ID);
+    if (id != 0x44 && id != 0x4D) {
+        rgbInitialized = false;
+        return false;
+    }
+    
+    // Integrationszeit setzen (0xFF = 2.4ms, 0xF6 = 24ms, 0xD5 = 101ms)
+    tcsWrite8(TCS34725_ATIME, 0xF6);  // 24ms
+    
+    // Gain setzen (0x00 = 1x, 0x01 = 4x, 0x02 = 16x, 0x03 = 60x)
+    tcsWrite8(TCS34725_CONTROL, 0x01);  // 4x gain
+    
+    // Sensor aktivieren (PON + AEN)
+    tcsWrite8(TCS34725_ENABLE, 0x01);  // Power ON
+    delay(3);
+    tcsWrite8(TCS34725_ENABLE, 0x03);  // Power ON + ADC Enable
+    
+    rgbInitialized = true;
+    return true;
+}
+
+void enableRgbSensor() {
+    if (!rgbInitialized) {
+        initRgbSensor();
+    }
+}
+
+void readRgbValues(uint16_t* r, uint16_t* g, uint16_t* b, uint16_t* c) {
+    if (!rgbInitialized) {
+        *r = *g = *b = *c = 0;
+        return;
+    }
+    
+    selectMuxChannel(MUX_CHANNEL_RGB);
+    delay(30);  // Warten auf Messung
+    
+    *c = tcsRead16(TCS34725_CDATAL);
+    *r = tcsRead16(TCS34725_CDATAL + 2);
+    *g = tcsRead16(TCS34725_CDATAL + 4);
+    *b = tcsRead16(TCS34725_CDATAL + 6);
+}
+
+BallColor detectBallColor() {
+    if (!rgbInitialized) return COLOR_UNKNOWN;
+    
+    uint16_t r, g, b, c;
+    readRgbValues(&r, &g, &b, &c);
+    
+    // Zu dunkel
+    if (c < 100) return COLOR_UNKNOWN;
+    
+    // Normalisieren
+    float sum = r + g + b;
+    if (sum < 1) sum = 1;
+    
+    float rNorm = (r / sum) * 255;
+    float gNorm = (g / sum) * 255;
+    float bNorm = (b / sum) * 255;
+    
+    // ROT
+    if (rNorm > 120 && rNorm > gNorm * 1.5 && rNorm > bNorm * 1.5) {
+        if (gNorm > 60) return COLOR_ORANGE;
+        return COLOR_RED;
+    }
+    
+    // GRÜN
+    if (gNorm > 100 && gNorm > rNorm * 1.3 && gNorm > bNorm * 1.3) {
+        return COLOR_GREEN;
+    }
+    
+    // BLAU
+    if (bNorm > 100 && bNorm > rNorm * 1.3 && bNorm > gNorm * 1.3) {
+        return COLOR_BLUE;
+    }
+    
+    // GELB
+    if (rNorm > 80 && gNorm > 80 && bNorm < 70) {
+        return COLOR_YELLOW;
+    }
+    
+    // WEISS
+    if (c > 1000 && abs(rNorm - gNorm) < 30 && abs(gNorm - bNorm) < 30) {
+        return COLOR_WHITE;
+    }
+    
+    return COLOR_UNKNOWN;
+}
+
+const char* getColorName(BallColor color) {
+    switch (color) {
+        case COLOR_RED:     return "ROT";
+        case COLOR_GREEN:   return "GRUEN";
+        case COLOR_BLUE:    return "BLAU";
+        case COLOR_YELLOW:  return "GELB";
+        case COLOR_ORANGE:  return "ORANGE";
+        case COLOR_WHITE:   return "WEISS";
+        default:            return "???";
+    }
 }

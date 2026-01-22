@@ -5,23 +5,58 @@
 #include "logic.h"
 
 // =============================================================================
-// MAIN.CPP 
+// MAIN.CPP - Mit Ballsuche-Modus
 // =============================================================================
 // - State-Machine
 // - Menü
 // - Manöver-Ausführung
-// Logik ist in logic.cpp ausgelagert!
+// - Ballsuche nach roter Linie
 // =============================================================================
 
 // ===== MODI =====
-enum Mode { MODE_STOPPED, MODE_RUNNING, MODE_DEBUG, MODE_MANEUVERING };
-enum Menu { MENU_START, MENU_CALIBRATE, MENU_DEBUG, MENU_MOTOR_TEST, MENU_COUNT };
+enum Mode { 
+    MODE_STOPPED, 
+    MODE_RUNNING,           // Linienfolger
+    MODE_DEBUG, 
+    MODE_MANEUVERING,
+    MODE_BALL_SEARCH,       // Ballsuche aktiv
+    MODE_BALL_APPROACH,     // Fahre auf Ball zu
+    MODE_BALL_PICKUP        // Ball aufnehmen (Greifer)
+};
+
+enum Menu { 
+    MENU_START, 
+    MENU_CALIBRATE, 
+    MENU_DEBUG, 
+    MENU_MOTOR_TEST,
+    MENU_BALL_SEARCH_TEST,  // Direkt Ballsuche testen
+    MENU_COUNT 
+};
+
+// ===== BALLSUCHE SUB-STATES =====
+enum BallSearchPhase {
+    PHASE_INIT,
+    PHASE_SCANNING,
+    PHASE_BALL_FOUND,
+    PHASE_APPROACHING,
+    PHASE_READING_COLOR,
+    PHASE_COMPLETE,
+    PHASE_FAILED
+};
 
 // ===== GLOBALE VARIABLEN =====
 static Mode mode = MODE_STOPPED;
 static Menu menu = MENU_START;
 static unsigned long lastTurnTime = 0;
 static unsigned long lastLcdUpdate = 0;
+
+// Ballsuche Variablen
+static BallSearchPhase ballPhase = PHASE_INIT;
+static unsigned long ballSearchStartTime = 0;
+static int rotationCount = 0;
+static BallColor savedBallColor = COLOR_UNKNOWN;
+static uint16_t ballDistance = 0;
+static uint16_t prevLaserDist = 0;
 
 // ===== VORWÄRTS-DEKLARATIONEN =====
 void runStateMachine();
@@ -32,9 +67,17 @@ void handleMenu();
 void executeMenu(Menu item);
 const char* menuName(Menu m);
 
+// Ballsuche Funktionen
+void startBallSearch();
+void runBallSearch();
+void approachBall();
+void readBallColor();
+
 // ===== MOTOR ISR =====
 void motorISR() {
-    if (mode == MODE_RUNNING) runMotors();
+    if (mode == MODE_RUNNING || mode == MODE_BALL_SEARCH || mode == MODE_BALL_APPROACH) {
+        runMotors();
+    }
 }
 
 // =============================================================================
@@ -43,17 +86,36 @@ void motorISR() {
 void setup() {
     #if DEBUG_SERIAL
     Serial.begin(115200);
+    Serial.println("LINIENFOLGER V3 mit Ballsuche");
     #endif
     
+    // I2C Multiplexer initialisieren (MUSS zuerst!)
+    initMultiplexer();
+    delay(100);
+    
+    // Hardware initialisieren
     initLCD();
+    initButtons();
     initSensors();
     initMotors();
     initLogic();
     
+    // Laser initialisieren (RGB erst später bei Bedarf)
+    lcdPrint("Init Laser...", "");
+    bool laserOk = initLaser();
+    delay(500);
+    
+    // Status anzeigen
+    char line2[17];
+    snprintf(line2, 17, "Laser: %s", laserOk ? "OK" : "ERR");
+    lcdPrint("Sensoren:", line2);
+    delay(1500);
+    
+    // Timer für Motor-ISR
     Timer1.initialize(50);
     Timer1.attachInterrupt(motorISR);
     
-    lcdPrint("LINIENFOLGER V3", "Optimiert!");
+    lcdPrint("LINIENFOLGER V3", "Mit Ballsuche!");
     delay(1500);
     lcdPrint("MENUE:", "> START");
 }
@@ -69,12 +131,13 @@ void loop() {
 // STATE MACHINE
 // =============================================================================
 void runStateMachine() {
-    // Notfall-Stopp: LEFT-Taste (immer aktiv!)
-    if (readButton() == BTN_LEFT && mode != MODE_STOPPED) {
+    // Notfall-Stopp: SELECT-Taste (immer aktiv!)
+    if (readButton() == BTN_SELECT && mode != MODE_STOPPED) {
         mode = MODE_STOPPED;
         stopMotors();
         disableMotors();
         resetLogic();
+        resetBallSearch();
         lcdPrint("GESTOPPT", "");
         delay(500);
         lcdPrint("MENUE:", menuName(menu));
@@ -110,16 +173,20 @@ void runStateMachine() {
                     (sensorValues[6] * 9) / 1000,
                     (sensorValues[7] * 9) / 1000);
 
-                // Zeile 2: Sensor-Counts und Signal
-                SignalType curSig = getCurrentSignal();
-                SignalType confSig = getConfirmedSignal();
-                SignalReason reason = getSignalReason();
-                if (confSig != SIG_NONE) {
-                    snprintf(l2, 17, "%s %s D:%d", getSignalName(confSig), getReasonName(reason), getTurnDirection());
+                // Zeile 2: Signal-Status oder Rot-Erkennung
+                if (isRedLineDetected()) {
+                    snprintf(l2, 17, "ROT ERKANNT!");
                 } else {
-                    snprintf(l2, 17, "L:%d R:%d %s",
-                        getLeftSideCount(), getRightSideCount(),
-                        getSignalName(curSig));
+                    SignalType curSig = getCurrentSignal();
+                    SignalType confSig = getConfirmedSignal();
+                    SignalReason reason = getSignalReason();
+                    if (confSig != SIG_NONE) {
+                        snprintf(l2, 17, "%s %s D:%d", getSignalName(confSig), getReasonName(reason), getTurnDirection());
+                    } else {
+                        snprintf(l2, 17, "L:%d R:%d %s",
+                            getLeftSideCount(), getRightSideCount(),
+                            getSignalName(curSig));
+                    }
                 }
 
                 lcdPrint(l1, l2);
@@ -128,6 +195,19 @@ void runStateMachine() {
             break;
 
         case MODE_MANEUVERING:
+            // Wird blockierend ausgeführt
+            break;
+            
+        case MODE_BALL_SEARCH:
+            runBallSearch();
+            break;
+            
+        case MODE_BALL_APPROACH:
+            approachBall();
+            break;
+            
+        case MODE_BALL_PICKUP:
+            readBallColor();
             break;
     }
 }
@@ -138,21 +218,21 @@ void runStateMachine() {
 void runLineFollower() {
     // 1. Updates
     updateSensors();
-    updateSignalDetection();  // Neue vereinfachte Funktion
+    updateSignalDetection();
     updateSpeed();
 
-    // Display-Update: Zeige Status
+    // Display-Update
     if (millis() - lastLcdUpdate > 200) {
         SignalType curSig = getCurrentSignal();
         SignalType confSig = getConfirmedSignal();
         SignalReason reason = getSignalReason();
         char l1[17], l2[17];
 
-        // Zeile 1: Nur Geschwindigkeit
         snprintf(l1, 17, "Speed: %d", getCurrentSpeed());
 
-        // Zeile 2: Signal-Status mit Grund
-        if (confSig != SIG_NONE) {
+        if (confSig == SIG_RED_LINE) {
+            snprintf(l2, 17, "ROTE LINIE!");
+        } else if (confSig != SIG_NONE) {
             snprintf(l2, 17, "OK! %s %s", getSignalName(confSig), getReasonName(reason));
         } else if (curSig != SIG_NONE) {
             snprintf(l2, 17, "Det: %s", getSignalName(curSig));
@@ -164,7 +244,19 @@ void runLineFollower() {
         lastLcdUpdate = millis();
     }
 
-    // 2. Linienverlust?
+    // 2. ROTE LINIE ERKANNT? → Wechsel zu Ballsuche!
+    if (isRedLineConfirmed()) {
+        stopMotors();
+        lcdPrint("ROTE LINIE!", "-> Ballsuche");
+        delay(1500);
+        
+        clearRedLineDetection();
+        startBallSearch();
+        mode = MODE_BALL_SEARCH;
+        return;
+    }
+
+    // 3. Linienverlust?
     if (!isLineDetected()) {
         mode = MODE_MANEUVERING;
         if (!searchLine()) {
@@ -179,9 +271,9 @@ void runLineFollower() {
         return;
     }
 
-    // 3. Bestätigtes Signal behandeln?
+    // 4. Bestätigtes Signal behandeln?
     SignalType sig = getConfirmedSignal();
-    if (sig != SIG_NONE && (millis() - lastTurnTime > TURN_COOLDOWN_MS)) {
+    if (sig != SIG_NONE && sig != SIG_RED_LINE && (millis() - lastTurnTime > TURN_COOLDOWN_MS)) {
         int dir = getTurnDirection();
         SignalReason reason = getSignalReason();
 
@@ -190,14 +282,187 @@ void runLineFollower() {
             executeTurn(dir, reason);
             mode = MODE_RUNNING;
             lastTurnTime = millis();
-            clearConfirmedSignal();  // Neue Funktion
+            clearConfirmedSignal();
             resetLogic();
             return;
         }
     }
 
-    // 4. PID
+    // 5. PID
     updatePID();
+}
+
+// =============================================================================
+// BALLSUCHE
+// =============================================================================
+void startBallSearch() {
+    initBallSearch();
+    ballPhase = PHASE_INIT;
+    ballSearchStartTime = millis();
+    rotationCount = 0;
+    savedBallColor = COLOR_UNKNOWN;
+    
+    enableMotors();
+}
+
+void runBallSearch() {
+    // Laser direkt auslesen
+    uint16_t dist = readLaserDistance();
+    
+    // Display-Update
+    if (millis() - lastLcdUpdate > 150) {
+        char l1[17], l2[17];
+        
+        switch (ballPhase) {
+            case PHASE_INIT:
+                snprintf(l1, 17, "BALLSUCHE");
+                snprintf(l2, 17, "Start...");
+                lcdPrint(l1, l2);
+                delay(500);
+                ballPhase = PHASE_SCANNING;
+                ballSearchStartTime = millis();
+                prevLaserDist = 0;
+                break;
+                
+            case PHASE_SCANNING:
+                snprintf(l1, 17, "Dist: %d mm", dist);
+                snprintf(l2, 17, "Suche...");
+                lcdPrint(l1, l2);
+                
+                // Drehe langsam auf der Stelle (links herum)
+                setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
+                
+                // Ball-Erkennung: Distanz im gültigen Bereich?
+                if (dist > LASER_BALL_MIN_DIST && dist < LASER_BALL_MAX_DIST) {
+                    // Sprung erkennen (vorher weiter weg, jetzt näher)
+                    if (prevLaserDist > 0 && (prevLaserDist - dist) > LASER_BALL_DETECT_JUMP) {
+                        stopMotors();
+                        ballDistance = dist;
+                        ballPhase = PHASE_BALL_FOUND;
+                    }
+                }
+                
+                prevLaserDist = dist;
+                
+                // Timeout-Check
+                if (millis() - ballSearchStartTime > SEARCH_MAX_ROTATIONS * 6000) {
+                    ballPhase = PHASE_FAILED;
+                }
+                break;
+                
+            case PHASE_BALL_FOUND:
+                snprintf(l1, 17, "Ball gefunden!");
+                snprintf(l2, 17, "Dist: %d mm", ballDistance);
+                lcdPrint(l1, l2);
+                delay(1000);
+                
+                mode = MODE_BALL_APPROACH;
+                ballPhase = PHASE_APPROACHING;
+                return;
+                
+            case PHASE_FAILED:
+                snprintf(l1, 17, "Kein Ball");
+                snprintf(l2, 17, "gefunden!");
+                lcdPrint(l1, l2);
+                stopMotors();
+                delay(2000);
+                mode = MODE_STOPPED;
+                lcdPrint("MENUE:", menuName(menu));
+                return;
+                
+            default:
+                break;
+        }
+        
+        lastLcdUpdate = millis();
+    }
+}
+
+void approachBall() {
+    uint16_t dist = readLaserDistance();
+    
+    // Display-Update
+    if (millis() - lastLcdUpdate > 100) {
+        char l1[17], l2[17];
+        snprintf(l1, 17, "Anfahren...");
+        snprintf(l2, 17, "Dist: %d mm", dist);
+        lcdPrint(l1, l2);
+        lastLcdUpdate = millis();
+    }
+    
+    // Zieldistanz erreicht?
+    if (dist > 0 && dist <= LASER_TARGET_DIST + LASER_APPROACH_TOLERANCE) {
+        stopMotors();
+        lcdPrint("Angekommen!", "Lese Farbe...");
+        delay(500);
+        mode = MODE_BALL_PICKUP;
+        ballPhase = PHASE_READING_COLOR;
+        return;
+    }
+    
+    // Zu nah? Stopp!
+    if (dist > 0 && dist < LASER_TARGET_DIST - 20) {
+        stopMotors();
+        mode = MODE_BALL_PICKUP;
+        ballPhase = PHASE_READING_COLOR;
+        return;
+    }
+    
+    // Weiter fahren
+    if (dist > 0) {
+        int speed = SPEED_APPROACH;
+        if (dist < 100) {
+            speed = SPEED_APPROACH / 2;
+        }
+        setMotorSpeeds(speed, speed);
+    } else {
+        // Kein Signal - langsam weiter
+        setMotorSpeeds(SPEED_APPROACH / 3, SPEED_APPROACH / 3);
+    }
+}
+
+void readBallColor() {
+    // RGB Sensor erst jetzt aktivieren!
+    lcdPrint("Init RGB...", "");
+    enableRgbSensor();
+    delay(500);
+    
+    // Farbe mehrmals lesen für Stabilität
+    BallColor colors[5];
+    int colorCounts[7] = {0};
+    
+    lcdPrint("Lese Farbe...", "");
+    
+    for (int i = 0; i < 5; i++) {
+        colors[i] = detectBallColor();
+        colorCounts[colors[i]]++;
+        delay(100);
+    }
+    
+    // Häufigste Farbe finden
+    int maxCount = 0;
+    savedBallColor = COLOR_UNKNOWN;
+    for (int i = 0; i < 7; i++) {
+        if (colorCounts[i] > maxCount) {
+            maxCount = colorCounts[i];
+            savedBallColor = (BallColor)i;
+        }
+    }
+    
+    // Ergebnis anzeigen
+    char l1[17], l2[17];
+    snprintf(l1, 17, "Farbe erkannt:");
+    snprintf(l2, 17, "%s", getColorName(savedBallColor));
+    lcdPrint(l1, l2);
+    
+    ballPhase = PHASE_COMPLETE;
+    
+    delay(3000);
+    
+    // Zurück zum Menü
+    mode = MODE_STOPPED;
+    disableMotors();
+    lcdPrint("MENUE:", menuName(menu));
 }
 
 // =============================================================================
@@ -209,17 +474,15 @@ void executeTurn(int dir, SignalReason reason) {
     snprintf(line2, 17, "%s %s", dirText, getReasonName(reason));
     lcdPrint("ABBIEGEN", line2);
 
-    // Vorfahren - bei Grün 2cm mehr (7cm statt 5cm)
     int stepsForward = STEPS_BEFORE_TURN;
     if (reason == REASON_GREEN) {
-        stepsForward = STEPS_BEFORE_TURN + (2 * STEPS_PER_CM);  // +2cm für Grün
+        stepsForward = STEPS_BEFORE_TURN + (2 * STEPS_PER_CM);
     }
     executeSteps(stepsForward, stepsForward, SPEED_TURN);
     delay(30);
 
-    // Drehen (Richtungen vertauscht wegen Motor-Orientierung)
-    if (dir > 0) executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);  // Links
-    else         executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);  // Rechts
+    if (dir > 0) executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);
+    else         executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);
 
     delay(30);
 }
@@ -227,12 +490,10 @@ void executeTurn(int dir, SignalReason reason) {
 bool searchLine() {
     lcdPrint("SUCHE...", "");
 
-    // Zurück
     executeSteps(-STEPS_BACKWARD, -STEPS_BACKWARD, SPEED_TURN);
     readLinePosition();
     if (isLineDetected()) return true;
 
-    // Suchen
     int dir = (readLinePosition() < LINE_CENTER) ? -1 : 1;
 
     for (int phase = 0; phase < 2; phase++) {
@@ -240,8 +501,7 @@ bool searchLine() {
         int steps = (phase == 0) ? 10 : 20;
 
         for (int i = 0; i < steps; i++) {
-            // Notfall-Stopp prüfen
-            if (readButton() == BTN_LEFT) {
+            if (readButton() == BTN_SELECT) {
                 stopMotors();
                 return false;
             }
@@ -249,8 +509,7 @@ bool searchLine() {
             setMotorSpeeds(searchDir * 100, -searchDir * 100);
             unsigned long t = millis();
             while (millis() - t < 100) {
-                // Notfall-Stopp auch während Drehung prüfen
-                if (readButton() == BTN_LEFT) {
+                if (readButton() == BTN_SELECT) {
                     stopMotors();
                     return false;
                 }
@@ -275,7 +534,7 @@ void handleMenu() {
     
     if (btn == BTN_UP)   menu = (Menu)((menu + MENU_COUNT - 1) % MENU_COUNT);
     if (btn == BTN_DOWN) menu = (Menu)((menu + 1) % MENU_COUNT);
-    if (btn == BTN_SELECT || btn == BTN_RIGHT) { executeMenu(menu); return; }
+    if (btn == BTN_SELECT) { executeMenu(menu); return; }
     
     char buf[17];
     snprintf(buf, 17, "> %s", menuName(menu));
@@ -285,7 +544,7 @@ void handleMenu() {
 void executeMenu(Menu item) {
     switch (item) {
         case MENU_START:
-            lcdPrint("START", "");
+            lcdPrint("START", "Linienfolger");
             resetLogic();
             enableMotors();
             mode = MODE_RUNNING;
@@ -314,6 +573,13 @@ void executeMenu(Menu item) {
             lcdPrint("MENUE:", menuName(menu));
             break;
             
+        case MENU_BALL_SEARCH_TEST:
+            lcdPrint("BALLSUCHE", "Test gestartet");
+            delay(1000);
+            startBallSearch();
+            mode = MODE_BALL_SEARCH;
+            break;
+            
         default:
             break;
     }
@@ -321,10 +587,11 @@ void executeMenu(Menu item) {
 
 const char* menuName(Menu m) {
     switch (m) {
-        case MENU_START:      return "START";
-        case MENU_CALIBRATE:  return "Kalibrieren";
-        case MENU_DEBUG:      return "Debug";
-        case MENU_MOTOR_TEST: return "Motor Test";
-        default:              return "?";
+        case MENU_START:           return "START";
+        case MENU_CALIBRATE:       return "Kalibrieren";
+        case MENU_DEBUG:           return "Debug";
+        case MENU_MOTOR_TEST:      return "Motor Test";
+        case MENU_BALL_SEARCH_TEST: return "Ballsuche";
+        default:                   return "?";
     }
 }

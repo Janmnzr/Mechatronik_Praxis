@@ -3,7 +3,7 @@
 #include "hardware.h"
 
 // =============================================================================
-// LOGIC.CPP - Vereinfachte Steuerungslogik mit GRÜN-Erkennung
+// LOGIC.CPP - Erweiterte Steuerungslogik mit Ballsuche
 // =============================================================================
 
 // ===== PRIVATE VARIABLEN =====
@@ -15,13 +15,17 @@ static int leftSideCount = 0;      // Sensoren 0,1,2,3
 static int rightSideCount = 0;     // Sensoren 4,5,6,7
 
 // --- 90°-Kurven Erkennung ---
-static unsigned long curveStartTime = 0;       // Timer: 0 = kein Signal, >0 = Signal erkannt
-static SignalType curveSignalType = SIG_NONE;  // LEFT oder RIGHT
-static int curveDirection = 0;                 // -1=Rechts, 1=Links, 0=Keine
+static unsigned long curveStartTime = 0;
+static SignalType curveSignalType = SIG_NONE;
+static int curveDirection = 0;
 
 // --- Grün-Erkennung ---
-static unsigned long greenStartTime = 0;       // Timer: 0 = kein Grün, >0 = Grün erkannt
-static int greenDirection = 0;                 // -1=Rechts, 1=Links, 0=Keine
+static unsigned long greenStartTime = 0;
+static int greenDirection = 0;
+
+// --- Rote Linie Erkennung ---
+static unsigned long redLineStartTime = 0;
+static bool redLineConfirmed = false;
 
 // --- Adaptiver PID ---
 static float lastError = 0;
@@ -30,6 +34,15 @@ static unsigned long lastPidTime = 0;
 // --- Smart Speed ---
 static int targetSpeed = SPEED_NORMAL;
 static float smoothedSpeed = SPEED_NORMAL;
+
+// --- Ballsuche ---
+static BallSearchState ballSearchState = BALL_SEARCH_IDLE;
+static uint16_t lastLaserDist = 0;
+static uint16_t ballDistance = 0;
+static uint16_t prevLaserDist = 0;
+static BallColor detectedBallColor = COLOR_UNKNOWN;
+static int scanSampleCount = 0;
+static unsigned long lastScanTime = 0;
 
 // =============================================================================
 // INITIALISIERUNG
@@ -52,6 +65,9 @@ void resetLogic() {
     greenStartTime = 0;
     greenDirection = 0;
 
+    redLineStartTime = 0;
+    redLineConfirmed = false;
+
     lastError = 0;
     lastPidTime = millis();
 
@@ -69,42 +85,68 @@ void updateSensors() {
     extern uint16_t sensorValues[8];
 
     // Aktive Sensoren pro Seite zählen
-    // WICHTIG: Sensoren 0-3 sind physisch RECHTS, 4-7 sind LINKS!
     leftSideCount = 0;
     rightSideCount = 0;
 
     for (int i = 0; i < 4; i++) {
-        if (sensorValues[i] > LINE_THRESHOLD) rightSideCount++;      // 0-3 = rechts
-        if (sensorValues[i + 4] > LINE_THRESHOLD) leftSideCount++;   // 4-7 = links
+        if (sensorValues[i] > LINE_THRESHOLD) rightSideCount++;
+        if (sensorValues[i + 4] > LINE_THRESHOLD) leftSideCount++;
     }
 
     // Diff für PID
-    // WICHTIG: 0-3 = physisch rechts, 4-7 = physisch links
-    int leftAvg = (sensorValues[6] + sensorValues[7]) / 2;   // 6-7 = physisch links
-    int rightAvg = (sensorValues[0] + sensorValues[1]) / 2;  // 0-1 = physisch rechts
+    int leftAvg = (sensorValues[6] + sensorValues[7]) / 2;
+    int rightAvg = (sensorValues[0] + sensorValues[1]) / 2;
     lastDiff = currentDiff;
     currentDiff = leftAvg - rightAvg;
 }
 
-// SIGNAL-ERKENNUNG (Vereinfacht)
+// =============================================================================
+// ROTE LINIE ERKENNUNG
+// =============================================================================
 
-// Helper-Funktion: Prüft ob ein Sensor-Paar grün ist
+bool isRedLineDetected() {
+    extern uint16_t sensorValues[8];
+    
+    int sensorsInRange = 0;
+    int sensorsBlack = 0;
+    
+    for (int i = 0; i < NUM_SENSORS; i++) {
+        // Rot: Werte zwischen 80-300 (Display zeigt "1" oder "2")
+        if (sensorValues[i] >= RED_LINE_MIN && sensorValues[i] <= RED_LINE_MAX) {
+            sensorsInRange++;
+        }
+        // Schwarz: Werte über 750
+        if (sensorValues[i] > LINE_THRESHOLD) {
+            sensorsBlack++;
+        }
+    }
+    
+    // Rote Linie: Mindestens 5 Sensoren im Rot-Bereich UND keine schwarze Linie
+    return (sensorsInRange >= RED_LINE_MIN_SENSORS && sensorsBlack == 0);
+}
+
+bool isRedLineConfirmed() {
+    return redLineConfirmed;
+}
+
+void clearRedLineDetection() {
+    redLineStartTime = 0;
+    redLineConfirmed = false;
+}
+
+// =============================================================================
+// SIGNAL-ERKENNUNG (Vereinfacht mit Rot-Erkennung)
+// =============================================================================
+
 static bool isPairGreen(int sensor1, int sensor2) {
     int avg = (sensor1 + sensor2) / 2;
     int diff = abs(sensor1 - sensor2);
-
-    // Bedingung 1: Durchschnitt im Grün-Bereich
     bool avgInRange = (avg >= GREEN_VALUE_MIN && avg <= GREEN_VALUE_MAX);
-
-    // Bedingung 2: Beide Sensoren haben ähnliche Werte
     bool valuesConsistent = (diff <= GREEN_PAIR_MAX_DIFF);
-
     return avgInRange && valuesConsistent;
 }
 
-// Helper-Funktion: Prüft ob ein Sensor-Paar weiß ist
 static bool isPairWhite(int sensor1, int sensor2) {
-    // Beide Sensoren müssen niedrige Werte haben (Weiß)
     return (sensor1 < 80 && sensor2 < 80);
 }
 
@@ -113,105 +155,93 @@ void updateSignalDetection() {
     extern uint16_t sensorValues[8];
 
     // =========================================================================
-    // PHASE 1: GRÜN-ERKENNUNG (höchste Priorität!)
+    // PHASE 0: ROTE LINIE ERKENNUNG (höchste Priorität!)
     // =========================================================================
-    // WICHTIG: Grün markiert die Seite wo abgebogen werden soll!
-    // → Grün LINKS = biege LINKS ab
-    // → Grün RECHTS = biege RECHTS ab
+    if (isRedLineDetected()) {
+        if (redLineStartTime == 0) {
+            redLineStartTime = now;
+        } else if (now - redLineStartTime >= RED_LINE_CONFIRM_MS) {
+            redLineConfirmed = true;
+            // Alle anderen Signale zurücksetzen
+            curveStartTime = 0;
+            greenStartTime = 0;
+            return;
+        }
+    } else {
+        redLineStartTime = 0;
+    }
 
-    // Linke Seite: Prüfe 3 Sensor-Paare auf Grün
-    // WICHTIG: Sensoren 4-7 sind physisch LINKS!
+    // Wenn rote Linie bestätigt, keine weiteren Signale prüfen
+    if (redLineConfirmed) return;
+
+    // =========================================================================
+    // PHASE 1: GRÜN-ERKENNUNG (höchste Priorität nach Rot!)
+    // =========================================================================
     bool greenLeft = isPairGreen(sensorValues[6], sensorValues[7]) ||
                      isPairGreen(sensorValues[5], sensorValues[6]) ||
                      isPairGreen(sensorValues[4], sensorValues[5]);
 
-    // Rechte Seite: Prüfe 3 Sensor-Paare auf Grün
-    // WICHTIG: Sensoren 0-3 sind physisch RECHTS!
     bool greenRight = isPairGreen(sensorValues[0], sensorValues[1]) ||
                       isPairGreen(sensorValues[1], sensorValues[2]) ||
                       isPairGreen(sensorValues[2], sensorValues[3]);
 
-    // ZUSÄTZLICHE BEDINGUNG: Andere Seite muss auf Weiß sein!
-    // Linke Seite hat Grün → rechte Seite muss Weiß haben
     bool whiteRight = isPairWhite(sensorValues[0], sensorValues[1]) ||
                       isPairWhite(sensorValues[1], sensorValues[2]) ||
                       isPairWhite(sensorValues[2], sensorValues[3]);
 
-    // Rechte Seite hat Grün → linke Seite muss Weiß haben
     bool whiteLeft = isPairWhite(sensorValues[6], sensorValues[7]) ||
                      isPairWhite(sensorValues[5], sensorValues[6]) ||
                      isPairWhite(sensorValues[4], sensorValues[5]);
 
-    // Grün erkannt NUR wenn: Grün auf einer Seite UND Weiß auf der anderen!
     bool validGreenLeft = greenLeft && !greenRight && whiteRight;
     bool validGreenRight = greenRight && !greenLeft && whiteLeft;
 
     if (validGreenLeft || validGreenRight) {
         targetSpeed = SPEED_SLOW;
+        int currentGreenDir = (validGreenLeft) ? 1 : -1;
 
-        // Bestimme Richtung
-        int currentGreenDir = (validGreenLeft) ? 1 : -1;  // 1=Links, -1=Rechts
-
-        // Timer starten oder prüfen
         if (greenStartTime == 0) {
-            // Neu erkannt → Timer starten
             greenStartTime = now;
             greenDirection = currentGreenDir;
         }
         else if (currentGreenDir == greenDirection && now - greenStartTime >= GREEN_CONFIRM_MS) {
-            // BESTÄTIGT! (Timer wird in main.cpp nach Abbiegung zurückgesetzt)
-            // 90°-Kurven-Timer zurücksetzen (Grün hat Priorität!)
             curveStartTime = 0;
-            return;  // Fertig, keine 90°-Kurven Prüfung mehr
+            return;
         }
         else if (currentGreenDir != greenDirection) {
-            // Richtung geändert → Reset
             greenStartTime = 0;
         }
 
-        // Grün erkannt → 90°-Kurven-Erkennung blockieren
         curveStartTime = 0;
         curveSignalType = SIG_NONE;
         curveDirection = 0;
     }
     else {
-        // KEIN Grün erkannt → Grün-Timer zurücksetzen
         if (greenStartTime > 0) {
             greenStartTime = 0;
             greenDirection = 0;
         }
 
         // =====================================================================
-        // PHASE 2: 90°-KURVEN ERKENNUNG (NUR wenn KEIN Grün!)
+        // PHASE 2: 90°-KURVEN ERKENNUNG
         // =====================================================================
-        // 3-4 Sensoren auf einer Seite UND max 1 auf der anderen = 90° Kurve
-
         if (leftSideCount >= CURVE_MIN_SENSORS && rightSideCount <= 1) {
-            // LINKS: 3-4 Sensoren links aktiv, max 1 rechts
             targetSpeed = SPEED_SLOW;
-
             if (curveStartTime == 0) {
-                // Neu erkannt → Timer starten
                 curveStartTime = now;
                 curveSignalType = SIG_CURVE_LEFT;
-                curveDirection = 1;  // Links
+                curveDirection = 1;
             }
-            // Timer läuft bereits (Bestätigung erfolgt in main.cpp)
         }
         else if (rightSideCount >= CURVE_MIN_SENSORS && leftSideCount <= 1) {
-            // RECHTS: 3-4 Sensoren rechts aktiv, max 1 links
             targetSpeed = SPEED_SLOW;
-
             if (curveStartTime == 0) {
-                // Neu erkannt → Timer starten
                 curveStartTime = now;
                 curveSignalType = SIG_CURVE_RIGHT;
-                curveDirection = -1;  // Rechts
+                curveDirection = -1;
             }
-            // Timer läuft bereits (Bestätigung erfolgt in main.cpp)
         }
         else if (curveStartTime > 0) {
-            // Kein Signal mehr → Reset
             curveStartTime = 0;
             curveSignalType = SIG_NONE;
             curveDirection = 0;
@@ -280,9 +310,9 @@ void updateSpeed() {
     float alpha = 0.15f;
 
     if (targetSpeed < smoothedSpeed) {
-        alpha = 0.25f;  // Schneller bremsen
+        alpha = 0.25f;
     } else {
-        alpha = 0.10f;  // Langsamer beschleunigen
+        alpha = 0.10f;
     }
 
     smoothedSpeed = smoothedSpeed + alpha * (targetSpeed - smoothedSpeed);
@@ -291,11 +321,119 @@ void updateSpeed() {
 }
 
 // =============================================================================
+// BALLSUCHE
+// =============================================================================
+
+void initBallSearch() {
+    ballSearchState = BALL_SEARCH_IDLE;
+    lastLaserDist = 0;
+    prevLaserDist = 0;
+    ballDistance = 0;
+    detectedBallColor = COLOR_UNKNOWN;
+    scanSampleCount = 0;
+    lastScanTime = millis();
+}
+
+void resetBallSearch() {
+    initBallSearch();
+}
+
+void updateBallSearch() {
+    unsigned long now = millis();
+    
+    // Laser-Distanz aktualisieren
+    if (isLaserReady()) {
+        prevLaserDist = lastLaserDist;
+        lastLaserDist = readLaserDistance();
+    }
+    
+    switch (ballSearchState) {
+        case BALL_SEARCH_IDLE:
+            // Warten auf Start
+            break;
+            
+        case BALL_SEARCH_SCANNING:
+            // Prüfe auf Sprung im Laser-Wert (Ball erkannt)
+            if (prevLaserDist > 0 && lastLaserDist > 0) {
+                int distJump = (int)prevLaserDist - (int)lastLaserDist;
+                
+                // Positiver Sprung = plötzlich näher = Ball erkannt
+                if (distJump > LASER_BALL_DETECT_JUMP &&
+                    lastLaserDist >= LASER_BALL_MIN_DIST &&
+                    lastLaserDist <= LASER_BALL_MAX_DIST) {
+                    
+                    ballDistance = lastLaserDist;
+                    ballSearchState = BALL_SEARCH_FOUND;
+                    stopMotors();
+                }
+            }
+            break;
+            
+        case BALL_SEARCH_FOUND:
+            // Ball wurde gefunden, warte auf Annäherungsbefehl
+            break;
+            
+        case BALL_SEARCH_APPROACHING:
+            // Fahre auf Ball zu bis Zieldistanz erreicht
+            if (lastLaserDist > 0) {
+                if (lastLaserDist <= LASER_TARGET_DIST + LASER_APPROACH_TOLERANCE) {
+                    stopMotors();
+                    ballSearchState = BALL_SEARCH_ARRIVED;
+                }
+            }
+            break;
+            
+        case BALL_SEARCH_ARRIVED:
+            // Bei Ball angekommen, warte auf Farbmessung
+            break;
+            
+        case BALL_SEARCH_COLOR_READ:
+            // Farbe wurde gelesen
+            break;
+            
+        case BALL_SEARCH_FAILED:
+            // Suche fehlgeschlagen
+            break;
+    }
+}
+
+bool isBallDetected() {
+    if (prevLaserDist == 0 || lastLaserDist == 0) return false;
+    
+    int distJump = (int)prevLaserDist - (int)lastLaserDist;
+    
+    return (distJump > LASER_BALL_DETECT_JUMP &&
+            lastLaserDist >= LASER_BALL_MIN_DIST &&
+            lastLaserDist <= LASER_BALL_MAX_DIST);
+}
+
+BallSearchState getBallSearchState() {
+    return ballSearchState;
+}
+
+uint16_t getLastLaserDistance() {
+    return lastLaserDist;
+}
+
+uint16_t getBallDistance() {
+    return ballDistance;
+}
+
+BallColor getDetectedBallColor() {
+    return detectedBallColor;
+}
+
+// =============================================================================
 // GETTER
 // =============================================================================
 
 SignalType getConfirmedSignal() {
     unsigned long now = millis();
+
+    // Rote Linie hat höchste Priorität
+    if (redLineConfirmed) {
+        return SIG_RED_LINE;
+    }
 
     // Grün hat Priorität
     if (greenStartTime > 0 && now - greenStartTime >= GREEN_CONFIRM_MS) {
@@ -313,6 +451,11 @@ SignalType getConfirmedSignal() {
 SignalReason getSignalReason() {
     unsigned long now = millis();
 
+    // Rote Linie
+    if (redLineConfirmed) {
+        return REASON_RED_LINE;
+    }
+
     // Grün hat Priorität
     if (greenStartTime > 0 && now - greenStartTime >= GREEN_CONFIRM_MS) {
         return REASON_GREEN;
@@ -329,7 +472,7 @@ SignalReason getSignalReason() {
 int getTurnDirection() {
     unsigned long now = millis();
 
-    // Grün hat Priorität
+    // Grün hat Priorität (bei roter Linie keine Richtung)
     if (greenStartTime > 0 && now - greenStartTime >= GREEN_CONFIRM_MS) {
         return greenDirection;
     }
@@ -363,7 +506,7 @@ int getRightSideCount() {
 }
 
 SignalType getCurrentSignal() {
-    // Aktuell erkanntes Signal (auch wenn noch nicht bestätigt)
+    if (redLineConfirmed) return SIG_RED_LINE;
     if (greenStartTime > 0) {
         return (greenDirection == 1) ? SIG_CURVE_LEFT : SIG_CURVE_RIGHT;
     }
@@ -394,6 +537,7 @@ const char* getSignalName(SignalType s) {
         case SIG_NONE:         return "NONE";
         case SIG_CURVE_LEFT:   return "LEFT";
         case SIG_CURVE_RIGHT:  return "RIGHT";
+        case SIG_RED_LINE:     return "RED";
         default:               return "?";
     }
 }
@@ -403,6 +547,20 @@ const char* getReasonName(SignalReason r) {
         case REASON_NONE:      return "-";
         case REASON_GREEN:     return "GRUEN";
         case REASON_90_CURVE:  return "90Grad";
+        case REASON_RED_LINE:  return "ROT";
         default:               return "?";
+    }
+}
+
+const char* getBallSearchStateName(BallSearchState s) {
+    switch (s) {
+        case BALL_SEARCH_IDLE:        return "IDLE";
+        case BALL_SEARCH_SCANNING:    return "SCAN";
+        case BALL_SEARCH_FOUND:       return "FOUND";
+        case BALL_SEARCH_APPROACHING: return "APPROACH";
+        case BALL_SEARCH_ARRIVED:     return "ARRIVED";
+        case BALL_SEARCH_COLOR_READ:  return "COLOR";
+        case BALL_SEARCH_FAILED:      return "FAILED";
+        default:                      return "?";
     }
 }
