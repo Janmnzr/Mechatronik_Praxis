@@ -111,7 +111,7 @@ bool isRedLineDetected() {
     int sensorsBlack = 0;
     
     for (int i = 0; i < NUM_SENSORS; i++) {
-        // Rot: Werte zwischen 80-300 (Display zeigt "1" oder "2")
+        // Rot: Werte zwischen 50-400 (Display zeigt "0", "1", "2" oder "3")
         if (sensorValues[i] >= RED_LINE_MIN && sensorValues[i] <= RED_LINE_MAX) {
             sensorsInRange++;
         }
@@ -121,8 +121,8 @@ bool isRedLineDetected() {
         }
     }
     
-    // Rote Linie: Mindestens 5 Sensoren im Rot-Bereich UND keine schwarze Linie
-    return (sensorsInRange >= RED_LINE_MIN_SENSORS && sensorsBlack == 0);
+    // Rote Linie: Mindestens 4 Sensoren im Rot-Bereich UND maximal 1 schwarzer Sensor
+    return (sensorsInRange >= RED_LINE_MIN_SENSORS && sensorsBlack <= 1);
 }
 
 bool isRedLineConfirmed() {
@@ -167,7 +167,10 @@ void updateSignalDetection() {
             greenStartTime = 0;
             return;
         }
-    } else {
+    }
+    // WICHTIG: Timer NICHT zurücksetzen wenn kurz nicht erkannt!
+    // Nur zurücksetzen wenn lange nicht erkannt (>500ms)
+    else if (redLineStartTime > 0 && (now - redLineStartTime) > 500) {
         redLineStartTime = 0;
     }
 

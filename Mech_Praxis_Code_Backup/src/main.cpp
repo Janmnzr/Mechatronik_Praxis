@@ -221,7 +221,32 @@ void runLineFollower() {
     updateSignalDetection();
     updateSpeed();
 
-    // Display-Update
+    // 2. ROTE LINIE ERKANNT? → Wechsel zu Ballsuche! (ALLERERSTE Prüfung!)
+    if (isRedLineConfirmed()) {
+        stopMotors();
+        lcdPrint("ROTE LINIE!", "-> Ballsuche");
+        delay(1500);
+        
+        clearRedLineDetection();
+        startBallSearch();
+        mode = MODE_BALL_SEARCH;
+        return;
+    }
+    
+    // 3. Wenn rote Linie gerade erkannt wird (aber noch nicht bestätigt) - weiterfahren, NICHT suchen!
+    if (isRedLineDetected()) {
+        // Langsam weiterfahren während Bestätigung läuft
+        setMotorSpeeds(SPEED_SLOW, SPEED_SLOW);
+        
+        // Display-Update
+        if (millis() - lastLcdUpdate > 200) {
+            lcdPrint("Speed: SLOW", "ROT ERKANNT!");
+            lastLcdUpdate = millis();
+        }
+        return;  // WICHTIG: Nicht weiter prüfen, sonst Linienverlust!
+    }
+
+    // Display-Update (nur wenn keine rote Linie)
     if (millis() - lastLcdUpdate > 200) {
         SignalType curSig = getCurrentSignal();
         SignalType confSig = getConfirmedSignal();
@@ -230,11 +255,7 @@ void runLineFollower() {
 
         snprintf(l1, 17, "Speed: %d", getCurrentSpeed());
 
-        if (isRedLineDetected()) {
-            snprintf(l2, 17, "ROT ERKANNT!");
-        } else if (confSig == SIG_RED_LINE) {
-            snprintf(l2, 17, "ROTE LINIE!");
-        } else if (confSig != SIG_NONE) {
+        if (confSig != SIG_NONE) {
             snprintf(l2, 17, "OK! %s %s", getSignalName(confSig), getReasonName(reason));
         } else if (curSig != SIG_NONE) {
             snprintf(l2, 17, "Det: %s", getSignalName(curSig));
@@ -246,20 +267,8 @@ void runLineFollower() {
         lastLcdUpdate = millis();
     }
 
-    // 2. ROTE LINIE ERKANNT? → Wechsel zu Ballsuche! (VOR Linienverlust prüfen!)
-    if (isRedLineConfirmed()) {
-        stopMotors();
-        lcdPrint("ROTE LINIE!", "-> Ballsuche");
-        delay(1500);
-        
-        clearRedLineDetection();
-        startBallSearch();
-        mode = MODE_BALL_SEARCH;
-        return;
-    }
-
-    // 3. Linienverlust? (Aber NUR wenn KEINE rote Linie erkannt wird!)
-    if (!isLineDetected() && !isRedLineDetected()) {
+    // 4. Linienverlust?
+    if (!isLineDetected()) {
         mode = MODE_MANEUVERING;
         if (!searchLine()) {
             mode = MODE_STOPPED;
@@ -273,7 +282,7 @@ void runLineFollower() {
         return;
     }
 
-    // 4. Bestätigtes Signal behandeln?
+    // 5. Bestätigtes Signal behandeln?
     SignalType sig = getConfirmedSignal();
     if (sig != SIG_NONE && sig != SIG_RED_LINE && (millis() - lastTurnTime > TURN_COOLDOWN_MS)) {
         int dir = getTurnDirection();
@@ -290,13 +299,8 @@ void runLineFollower() {
         }
     }
 
-    // 5. PID (nur wenn keine rote Linie)
-    if (!isRedLineDetected()) {
-        updatePID();
-    } else {
-        // Bei roter Linie: langsam weiterfahren bis bestätigt
-        setMotorSpeeds(SPEED_SLOW, SPEED_SLOW);
-    }
+    // 6. PID
+    updatePID();
 }
 
 // =============================================================================

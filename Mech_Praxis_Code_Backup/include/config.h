@@ -91,14 +91,14 @@
 // =============================================================================
 // ROTE LINIE ERKENNUNG (Parkour-Ende)
 // =============================================================================
-// Rote Querlinie: Sensoren zeigen niedrige Werte (100-250)
+// Rote Querlinie: Sensoren zeigen mittlere Werte (100-400)
 // Im Gegensatz zu Schwarz (>750) und Weiß (<50)
 // =============================================================================
 
-#define RED_LINE_MIN        80      // Minimaler Wert für Rot-Erkennung
-#define RED_LINE_MAX        300     // Maximaler Wert für Rot-Erkennung
-#define RED_LINE_MIN_SENSORS 5      // Mindestens 5 Sensoren müssen im Bereich sein
-#define RED_LINE_CONFIRM_MS  100    // Bestätigungszeit für rote Linie
+#define RED_LINE_MIN        50      // Minimaler Wert für Rot-Erkennung
+#define RED_LINE_MAX        400     // Maximaler Wert für Rot-Erkennung (erhöht!)
+#define RED_LINE_MIN_SENSORS 4      // Mindestens 4 Sensoren müssen im Bereich sein
+#define RED_LINE_CONFIRM_MS  80     // Bestätigungszeit für rote Linie (kürzer!)
 
 // =============================================================================
 // SIGNAL-ERKENNUNG (Zeitbasiert)
