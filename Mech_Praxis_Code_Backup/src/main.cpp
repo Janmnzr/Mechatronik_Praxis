@@ -35,8 +35,10 @@ enum Menu {
 
 // ===== BALLSUCHE SUB-STATES =====
 enum BallSearchPhase {
+    PHASE_ENTRY,            // NEU: Ins Feld hineinfahren
     PHASE_INIT,
     PHASE_SCANNING,
+    PHASE_VALIDATING,       // NEU: Ball validieren
     PHASE_BALL_FOUND,
     PHASE_APPROACHING,
     PHASE_READING_COLOR,
@@ -51,12 +53,14 @@ static unsigned long lastTurnTime = 0;
 static unsigned long lastLcdUpdate = 0;
 
 // Ballsuche Variablen
-static BallSearchPhase ballPhase = PHASE_INIT;
+static BallSearchPhase ballPhase = PHASE_ENTRY;
 static unsigned long ballSearchStartTime = 0;
 static int rotationCount = 0;
 static BallColor savedBallColor = COLOR_UNKNOWN;
 static uint16_t ballDistance = 0;
 static uint16_t prevLaserDist = 0;
+static uint16_t candidateBallDist = 0;  // NEU: Kandidat für Ball-Distanz
+static int ballValidationCount = 0;      // NEU: Validierungszähler
 
 // ===== VORWÄRTS-DEKLARATIONEN =====
 void runStateMachine();
@@ -308,10 +312,12 @@ void runLineFollower() {
 // =============================================================================
 void startBallSearch() {
     initBallSearch();
-    ballPhase = PHASE_INIT;
+    ballPhase = PHASE_ENTRY;  // Starte mit Einfahrt ins Feld
     ballSearchStartTime = millis();
     rotationCount = 0;
     savedBallColor = COLOR_UNKNOWN;
+    candidateBallDist = 0;
+    ballValidationCount = 0;
     
     enableMotors();
 }
@@ -320,72 +326,128 @@ void runBallSearch() {
     // Laser direkt auslesen
     uint16_t dist = readLaserDistance();
     
-    // Display-Update
-    if (millis() - lastLcdUpdate > 150) {
-        char l1[17], l2[17];
-        
-        switch (ballPhase) {
-            case PHASE_INIT:
-                snprintf(l1, 17, "BALLSUCHE");
-                snprintf(l2, 17, "Start...");
-                lcdPrint(l1, l2);
-                delay(500);
-                ballPhase = PHASE_SCANNING;
-                ballSearchStartTime = millis();
-                prevLaserDist = 0;
-                break;
-                
-            case PHASE_SCANNING:
+    char l1[17], l2[17];
+    
+    switch (ballPhase) {
+        case PHASE_ENTRY:
+            // Ins Feld hineinfahren (30cm)
+            lcdPrint("BALLSUCHE", "Fahre ins Feld");
+            executeSteps(SEARCH_ENTRY_DISTANCE * STEPS_PER_CM, 
+                        SEARCH_ENTRY_DISTANCE * STEPS_PER_CM, 
+                        SPEED_APPROACH);
+            ballPhase = PHASE_INIT;
+            break;
+            
+        case PHASE_INIT:
+            lcdPrint("BALLSUCHE", "Start Scan...");
+            delay(500);
+            ballPhase = PHASE_SCANNING;
+            ballSearchStartTime = millis();
+            prevLaserDist = 0;
+            candidateBallDist = 0;
+            ballValidationCount = 0;
+            break;
+            
+        case PHASE_SCANNING:
+            // Display-Update
+            if (millis() - lastLcdUpdate > 150) {
                 snprintf(l1, 17, "Dist: %d mm", dist);
                 snprintf(l2, 17, "Suche...");
                 lcdPrint(l1, l2);
-                
-                // Drehe langsam auf der Stelle (links herum)
-                setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
-                
-                // Ball-Erkennung: Distanz im gültigen Bereich?
-                if (dist > LASER_BALL_MIN_DIST && dist < LASER_BALL_MAX_DIST) {
-                    // Sprung erkennen (vorher weiter weg, jetzt näher)
-                    if (prevLaserDist > 0 && (prevLaserDist - dist) > LASER_BALL_DETECT_JUMP) {
-                        stopMotors();
+                lastLcdUpdate = millis();
+            }
+            
+            // Drehe langsam auf der Stelle (links herum)
+            setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
+            
+            // Ball-Erkennung: Distanz im gültigen Bereich?
+            if (dist > LASER_BALL_MIN_DIST && dist < LASER_BALL_MAX_DIST) {
+                // Sprung erkennen (vorher weiter weg, jetzt näher)
+                if (prevLaserDist > 0 && (prevLaserDist - dist) > LASER_BALL_DETECT_JUMP) {
+                    // Möglicher Ball gefunden - stoppen und validieren
+                    stopMotors();
+                    candidateBallDist = dist;
+                    ballValidationCount = 1;
+                    ballPhase = PHASE_VALIDATING;
+                    delay(100);
+                }
+            }
+            
+            prevLaserDist = dist;
+            
+            // Timeout-Check
+            if (millis() - ballSearchStartTime > SEARCH_MAX_ROTATIONS * 6000) {
+                ballPhase = PHASE_FAILED;
+            }
+            break;
+            
+        case PHASE_VALIDATING:
+            // Ball 3x validieren
+            if (millis() - lastLcdUpdate > 100) {
+                snprintf(l1, 17, "Validiere %d/3", ballValidationCount);
+                snprintf(l2, 17, "Dist: %d mm", dist);
+                lcdPrint(l1, l2);
+                lastLcdUpdate = millis();
+            }
+            
+            // Prüfe ob Distanz noch ähnlich ist (Ball noch da?)
+            if (dist > LASER_BALL_MIN_DIST && dist < LASER_BALL_MAX_DIST) {
+                // Distanz sollte ähnlich sein wie beim ersten Erkennen (+/- 50mm)
+                if (abs((int)dist - (int)candidateBallDist) < 50) {
+                    ballValidationCount++;
+                    
+                    if (ballValidationCount >= BALL_VALIDATION_COUNT) {
+                        // Ball bestätigt!
                         ballDistance = dist;
                         ballPhase = PHASE_BALL_FOUND;
+                    } else {
+                        delay(150);  // Kurz warten vor nächster Messung
                     }
+                } else {
+                    // Distanz zu unterschiedlich - war wohl kein Ball (Wand?)
+                    snprintf(l1, 17, "Fehlalarm!");
+                    snprintf(l2, 17, "Weiter suchen");
+                    lcdPrint(l1, l2);
+                    delay(500);
+                    
+                    // Zurück zum Scannen
+                    ballPhase = PHASE_SCANNING;
+                    candidateBallDist = 0;
+                    ballValidationCount = 0;
                 }
-                
-                prevLaserDist = dist;
-                
-                // Timeout-Check
-                if (millis() - ballSearchStartTime > SEARCH_MAX_ROTATIONS * 6000) {
-                    ballPhase = PHASE_FAILED;
-                }
-                break;
-                
-            case PHASE_BALL_FOUND:
-                snprintf(l1, 17, "Ball gefunden!");
-                snprintf(l2, 17, "Dist: %d mm", ballDistance);
+            } else {
+                // Objekt nicht mehr da - Fehlalarm
+                snprintf(l1, 17, "Objekt weg!");
+                snprintf(l2, 17, "Weiter suchen");
                 lcdPrint(l1, l2);
-                delay(1000);
+                delay(500);
                 
-                mode = MODE_BALL_APPROACH;
-                ballPhase = PHASE_APPROACHING;
-                return;
-                
-            case PHASE_FAILED:
-                snprintf(l1, 17, "Kein Ball");
-                snprintf(l2, 17, "gefunden!");
-                lcdPrint(l1, l2);
-                stopMotors();
-                delay(2000);
-                mode = MODE_STOPPED;
-                lcdPrint("MENUE:", menuName(menu));
-                return;
-                
-            default:
-                break;
-        }
-        
-        lastLcdUpdate = millis();
+                ballPhase = PHASE_SCANNING;
+                candidateBallDist = 0;
+                ballValidationCount = 0;
+            }
+            break;
+            
+        case PHASE_BALL_FOUND:
+            snprintf(l1, 17, "Ball gefunden!");
+            snprintf(l2, 17, "Dist: %d mm", ballDistance);
+            lcdPrint(l1, l2);
+            delay(1000);
+            
+            mode = MODE_BALL_APPROACH;
+            ballPhase = PHASE_APPROACHING;
+            return;
+            
+        case PHASE_FAILED:
+            lcdPrint("Kein Ball", "gefunden!");
+            stopMotors();
+            delay(2000);
+            mode = MODE_STOPPED;
+            lcdPrint("MENUE:", menuName(menu));
+            return;
+            
+        default:
+            break;
     }
 }
 

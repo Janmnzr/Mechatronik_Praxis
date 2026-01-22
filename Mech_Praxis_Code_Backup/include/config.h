@@ -95,9 +95,9 @@
 // Im Gegensatz zu Schwarz (>750) und Weiß (<50)
 // =============================================================================
 
-#define RED_LINE_MIN        50      // Minimaler Wert für Rot-Erkennung
-#define RED_LINE_MAX        400     // Maximaler Wert für Rot-Erkennung (erhöht!)
-#define RED_LINE_MIN_SENSORS 4      // Mindestens 4 Sensoren müssen im Bereich sein
+#define RED_LINE_MIN        70      // Minimaler Wert für Rot-Erkennung
+#define RED_LINE_MAX        300     // Maximaler Wert für Rot-Erkennung (erhöht!)
+#define RED_LINE_MIN_SENSORS 5      // Mindestens 4 Sensoren müssen im Bereich sein
 #define RED_LINE_CONFIRM_MS  80     // Bestätigungszeit für rote Linie (kürzer!)
 
 // =============================================================================
@@ -124,7 +124,7 @@
 // --- VL53L1X LASER SENSOR ---
 #define LASER_TIMING_BUDGET_MS  50      // Messzeit (höher = genauer)
 #define LASER_MAX_RANGE_MM      1200    // Maximale Reichweite
-#define LASER_BALL_DETECT_JUMP  100     // Sprung in mm der Ball signalisiert
+#define LASER_BALL_DETECT_JUMP  150     // Sprung in mm der Ball signalisiert
 #define LASER_BALL_MIN_DIST     30      // Minimale Ball-Distanz in mm
 #define LASER_BALL_MAX_DIST     500     // Maximale Ball-Distanz in mm
 #define LASER_TARGET_DIST       50      // Zieldistanz zum Ball in mm (Greifer-Position)
@@ -138,6 +138,8 @@
 #define SEARCH_ROTATION_STEP_MS 100     // Zeit pro Rotationsschritt
 #define SEARCH_SCAN_SAMPLES     5       // Anzahl Samples pro Messposition
 #define SEARCH_MAX_ROTATIONS    2       // Maximale volle Umdrehungen
+#define SEARCH_ENTRY_DISTANCE   20      // Einfahrt ins Feld in cm (30cm)
+#define BALL_VALIDATION_COUNT   3       // Ball muss 3x validiert werden
 
 // =============================================================================
 // MANÖVER-KONSTANTEN (berechnet aus Mechanik)
