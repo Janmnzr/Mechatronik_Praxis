@@ -230,7 +230,9 @@ void runLineFollower() {
 
         snprintf(l1, 17, "Speed: %d", getCurrentSpeed());
 
-        if (confSig == SIG_RED_LINE) {
+        if (isRedLineDetected()) {
+            snprintf(l2, 17, "ROT ERKANNT!");
+        } else if (confSig == SIG_RED_LINE) {
             snprintf(l2, 17, "ROTE LINIE!");
         } else if (confSig != SIG_NONE) {
             snprintf(l2, 17, "OK! %s %s", getSignalName(confSig), getReasonName(reason));
@@ -244,7 +246,7 @@ void runLineFollower() {
         lastLcdUpdate = millis();
     }
 
-    // 2. ROTE LINIE ERKANNT? → Wechsel zu Ballsuche!
+    // 2. ROTE LINIE ERKANNT? → Wechsel zu Ballsuche! (VOR Linienverlust prüfen!)
     if (isRedLineConfirmed()) {
         stopMotors();
         lcdPrint("ROTE LINIE!", "-> Ballsuche");
@@ -256,8 +258,8 @@ void runLineFollower() {
         return;
     }
 
-    // 3. Linienverlust?
-    if (!isLineDetected()) {
+    // 3. Linienverlust? (Aber NUR wenn KEINE rote Linie erkannt wird!)
+    if (!isLineDetected() && !isRedLineDetected()) {
         mode = MODE_MANEUVERING;
         if (!searchLine()) {
             mode = MODE_STOPPED;
@@ -288,8 +290,13 @@ void runLineFollower() {
         }
     }
 
-    // 5. PID
-    updatePID();
+    // 5. PID (nur wenn keine rote Linie)
+    if (!isRedLineDetected()) {
+        updatePID();
+    } else {
+        // Bei roter Linie: langsam weiterfahren bis bestätigt
+        setMotorSpeeds(SPEED_SLOW, SPEED_SLOW);
+    }
 }
 
 // =============================================================================
