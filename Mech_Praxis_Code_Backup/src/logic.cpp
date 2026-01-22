@@ -109,20 +109,50 @@ bool isRedLineDetected() {
     
     int sensorsInRange = 0;
     int sensorsBlack = 0;
+    int sensorsWhite = 0;
+    long sum = 0;
+    int minVal = 1000;
+    int maxVal = 0;
     
     for (int i = 0; i < NUM_SENSORS; i++) {
-        // Rot: Werte zwischen 50-400 (Display zeigt "0", "1", "2" oder "3")
-        if (sensorValues[i] >= RED_LINE_MIN && sensorValues[i] <= RED_LINE_MAX) {
+        int val = sensorValues[i];
+        sum += val;
+        
+        if (val < minVal) minVal = val;
+        if (val > maxVal) maxVal = val;
+        
+        // Rot: Werte zwischen 70-350
+        if (val >= RED_LINE_MIN && val <= RED_LINE_MAX) {
             sensorsInRange++;
         }
         // Schwarz: Werte über 750
-        if (sensorValues[i] > LINE_THRESHOLD) {
+        if (val > LINE_THRESHOLD) {
             sensorsBlack++;
+        }
+        // Weiß: Werte unter 50
+        if (val < 50) {
+            sensorsWhite++;
         }
     }
     
-    // Rote Linie: Mindestens 4 Sensoren im Rot-Bereich UND maximal 1 schwarzer Sensor
-    return (sensorsInRange >= RED_LINE_MIN_SENSORS && sensorsBlack <= 1);
+    // Berechne Durchschnitt und Varianz
+    int avg = sum / NUM_SENSORS;
+    int range = maxVal - minVal;
+    
+    // ROTE LINIE Kriterien:
+    // 1. Mindestens 5 Sensoren im Rot-Bereich
+    // 2. Kein Sensor auf Schwarz (max 1)
+    // 3. Nicht alles Weiß
+    // 4. Geringe Varianz (alle Sensoren ähnlich) - Range < 200
+    // 5. Durchschnitt im mittleren Bereich (100-300)
+    
+    bool enoughInRange = (sensorsInRange >= RED_LINE_MIN_SENSORS);
+    bool noBlack = (sensorsBlack <= 1);
+    bool notAllWhite = (sensorsWhite < 6);
+    bool lowVariance = (range < 250);
+    bool avgInRange = (avg >= 80 && avg <= 350);
+    
+    return (enoughInRange && noBlack && notAllWhite && lowVariance && avgInRange);
 }
 
 bool isRedLineConfirmed() {

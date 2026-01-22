@@ -35,10 +35,12 @@ enum Menu {
 
 // ===== BALLSUCHE SUB-STATES =====
 enum BallSearchPhase {
-    PHASE_ENTRY,            // NEU: Ins Feld hineinfahren
+    PHASE_ENTRY,            // Ins Feld hineinfahren
     PHASE_INIT,
-    PHASE_SCANNING,
-    PHASE_VALIDATING,       // NEU: Ball validieren
+    PHASE_ROTATE_STEP,      // Kleine Drehung machen
+    PHASE_MEASURE,          // Stopp und messen
+    PHASE_VALIDATE,         // Minimum validieren
+    PHASE_TURN_TO_BALL,     // Zum Ball drehen
     PHASE_BALL_FOUND,
     PHASE_APPROACHING,
     PHASE_READING_COLOR,
@@ -55,12 +57,18 @@ static unsigned long lastLcdUpdate = 0;
 // Ballsuche Variablen
 static BallSearchPhase ballPhase = PHASE_ENTRY;
 static unsigned long ballSearchStartTime = 0;
-static int rotationCount = 0;
 static BallColor savedBallColor = COLOR_UNKNOWN;
 static uint16_t ballDistance = 0;
-static uint16_t prevLaserDist = 0;
-static uint16_t candidateBallDist = 0;  // NEU: Kandidat für Ball-Distanz
-static int ballValidationCount = 0;      // NEU: Validierungszähler
+
+// Scan-Daten
+#define SCAN_POSITIONS 36           // 360° / 10° = 36 Positionen
+#define SCAN_DEGREE_STEP 10         // 10° pro Schritt
+static uint16_t scanDistances[SCAN_POSITIONS];  // Gemessene Distanzen
+static int scanIndex = 0;           // Aktuelle Scan-Position
+static int minDistIndex = -1;       // Index mit kürzester Distanz
+static uint16_t minDist = 9999;     // Kürzeste gemessene Distanz
+static int measureCount = 0;        // Zähler für Mehrfachmessung
+static uint32_t measureSum = 0;     // Summe für Durchschnitt
 
 // ===== VORWÄRTS-DEKLARATIONEN =====
 void runStateMachine();
@@ -312,119 +320,152 @@ void runLineFollower() {
 // =============================================================================
 void startBallSearch() {
     initBallSearch();
-    ballPhase = PHASE_ENTRY;  // Starte mit Einfahrt ins Feld
+    ballPhase = PHASE_ENTRY;
     ballSearchStartTime = millis();
-    rotationCount = 0;
     savedBallColor = COLOR_UNKNOWN;
-    candidateBallDist = 0;
-    ballValidationCount = 0;
+    ballDistance = 0;
+    
+    // Scan-Daten zurücksetzen
+    scanIndex = 0;
+    minDistIndex = -1;
+    minDist = 9999;
+    measureCount = 0;
+    measureSum = 0;
+    for (int i = 0; i < SCAN_POSITIONS; i++) {
+        scanDistances[i] = 0;
+    }
     
     enableMotors();
 }
 
 void runBallSearch() {
-    // Laser direkt auslesen
-    uint16_t dist = readLaserDistance();
-    
     char l1[17], l2[17];
+    uint16_t dist;
     
     switch (ballPhase) {
         case PHASE_ENTRY:
-            // Ins Feld hineinfahren (30cm)
+            // Ins Feld hineinfahren
             lcdPrint("BALLSUCHE", "Fahre ins Feld");
             executeSteps(SEARCH_ENTRY_DISTANCE * STEPS_PER_CM, 
                         SEARCH_ENTRY_DISTANCE * STEPS_PER_CM, 
                         SPEED_APPROACH);
+            delay(300);
             ballPhase = PHASE_INIT;
             break;
             
         case PHASE_INIT:
-            lcdPrint("BALLSUCHE", "Start Scan...");
+            lcdPrint("BALLSUCHE", "Starte 360 Scan");
             delay(500);
-            ballPhase = PHASE_SCANNING;
-            ballSearchStartTime = millis();
-            prevLaserDist = 0;
-            candidateBallDist = 0;
-            ballValidationCount = 0;
+            scanIndex = 0;
+            minDist = 9999;
+            minDistIndex = -1;
+            ballPhase = PHASE_MEASURE;
             break;
             
-        case PHASE_SCANNING:
-            // Display-Update
-            if (millis() - lastLcdUpdate > 150) {
-                snprintf(l1, 17, "Dist: %d mm", dist);
-                snprintf(l2, 17, "Suche...");
-                lcdPrint(l1, l2);
-                lastLcdUpdate = millis();
-            }
+        case PHASE_MEASURE:
+            // An aktueller Position mehrfach messen
+            stopMotors();
+            delay(50);  // Stabilisieren
             
-            // Drehe langsam auf der Stelle (links herum)
-            setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
+            measureSum = 0;
+            measureCount = 0;
             
-            // Ball-Erkennung: Distanz im gültigen Bereich?
-            if (dist > LASER_BALL_MIN_DIST && dist < LASER_BALL_MAX_DIST) {
-                // Sprung erkennen (vorher weiter weg, jetzt näher)
-                if (prevLaserDist > 0 && (prevLaserDist - dist) > LASER_BALL_DETECT_JUMP) {
-                    // Möglicher Ball gefunden - stoppen und validieren
-                    stopMotors();
-                    candidateBallDist = dist;
-                    ballValidationCount = 1;
-                    ballPhase = PHASE_VALIDATING;
-                    delay(100);
+            // 5 Messungen machen und mitteln
+            for (int m = 0; m < 5; m++) {
+                dist = readLaserDistance();
+                if (dist > 0 && dist < 2000) {  // Gültige Messung
+                    measureSum += dist;
+                    measureCount++;
                 }
+                delay(30);
             }
             
-            prevLaserDist = dist;
+            // Durchschnitt berechnen
+            if (measureCount > 0) {
+                scanDistances[scanIndex] = measureSum / measureCount;
+            } else {
+                scanDistances[scanIndex] = 9999;  // Ungültig
+            }
             
-            // Timeout-Check
-            if (millis() - ballSearchStartTime > SEARCH_MAX_ROTATIONS * 6000) {
+            // Display aktualisieren
+            snprintf(l1, 17, "Scan %d/%d", scanIndex + 1, SCAN_POSITIONS);
+            snprintf(l2, 17, "Dist: %d mm", scanDistances[scanIndex]);
+            lcdPrint(l1, l2);
+            
+            // Minimum tracken (nur wenn im Ball-Bereich)
+            if (scanDistances[scanIndex] >= LASER_BALL_MIN_DIST && 
+                scanDistances[scanIndex] <= LASER_BALL_MAX_DIST &&
+                scanDistances[scanIndex] < minDist) {
+                minDist = scanDistances[scanIndex];
+                minDistIndex = scanIndex;
+            }
+            
+            scanIndex++;
+            
+            // Fertig mit Scan?
+            if (scanIndex >= SCAN_POSITIONS) {
+                ballPhase = PHASE_VALIDATE;
+            } else {
+                ballPhase = PHASE_ROTATE_STEP;
+            }
+            break;
+            
+        case PHASE_ROTATE_STEP:
+            // 10° drehen (ca. 680 steps = 90°, also ~76 steps = 10°)
+            {
+                int stepsFor10Deg = STEPS_90_DEGREE / 9;  // ~76 steps
+                executeSteps(-stepsFor10Deg, stepsFor10Deg, SPEED_SEARCH);
+            }
+            delay(100);
+            ballPhase = PHASE_MEASURE;
+            break;
+            
+        case PHASE_VALIDATE:
+            // Scan abgeschlossen - Ball gefunden?
+            if (minDistIndex >= 0 && minDist < LASER_BALL_MAX_DIST) {
+                snprintf(l1, 17, "Ball bei Pos %d", minDistIndex);
+                snprintf(l2, 17, "Dist: %d mm", minDist);
+                lcdPrint(l1, l2);
+                delay(1000);
+                
+                ballDistance = minDist;
+                ballPhase = PHASE_TURN_TO_BALL;
+            } else {
+                // Kein Ball gefunden
+                lcdPrint("Kein Ball", "im Bereich!");
+                delay(1500);
                 ballPhase = PHASE_FAILED;
             }
             break;
             
-        case PHASE_VALIDATING:
-            // Ball 3x validieren
-            if (millis() - lastLcdUpdate > 100) {
-                snprintf(l1, 17, "Validiere %d/3", ballValidationCount);
-                snprintf(l2, 17, "Dist: %d mm", dist);
-                lcdPrint(l1, l2);
-                lastLcdUpdate = millis();
-            }
-            
-            // Prüfe ob Distanz noch ähnlich ist (Ball noch da?)
-            if (dist > LASER_BALL_MIN_DIST && dist < LASER_BALL_MAX_DIST) {
-                // Distanz sollte ähnlich sein wie beim ersten Erkennen (+/- 50mm)
-                if (abs((int)dist - (int)candidateBallDist) < 50) {
-                    ballValidationCount++;
-                    
-                    if (ballValidationCount >= BALL_VALIDATION_COUNT) {
-                        // Ball bestätigt!
-                        ballDistance = dist;
-                        ballPhase = PHASE_BALL_FOUND;
-                    } else {
-                        delay(150);  // Kurz warten vor nächster Messung
-                    }
-                } else {
-                    // Distanz zu unterschiedlich - war wohl kein Ball (Wand?)
-                    snprintf(l1, 17, "Fehlalarm!");
-                    snprintf(l2, 17, "Weiter suchen");
-                    lcdPrint(l1, l2);
-                    delay(500);
-                    
-                    // Zurück zum Scannen
-                    ballPhase = PHASE_SCANNING;
-                    candidateBallDist = 0;
-                    ballValidationCount = 0;
-                }
-            } else {
-                // Objekt nicht mehr da - Fehlalarm
-                snprintf(l1, 17, "Objekt weg!");
-                snprintf(l2, 17, "Weiter suchen");
-                lcdPrint(l1, l2);
-                delay(500);
+        case PHASE_TURN_TO_BALL:
+            // Zurück zum Ball drehen
+            // Wir sind jetzt bei Position SCAN_POSITIONS (360°)
+            // Ball ist bei minDistIndex
+            // Wir müssen (SCAN_POSITIONS - minDistIndex) * 10° zurück drehen
+            {
+                int positionsBack = SCAN_POSITIONS - minDistIndex;
+                int stepsBack = (positionsBack * STEPS_90_DEGREE) / 9;
                 
-                ballPhase = PHASE_SCANNING;
-                candidateBallDist = 0;
-                ballValidationCount = 0;
+                snprintf(l1, 17, "Drehe zu Ball");
+                snprintf(l2, 17, "%d Pos zurueck", positionsBack);
+                lcdPrint(l1, l2);
+                
+                // Rückwärts drehen (rechts herum)
+                executeSteps(stepsBack, -stepsBack, SPEED_SEARCH);
+                delay(200);
+                
+                // Nochmal messen zur Bestätigung
+                dist = readLaserDistance();
+                if (dist > LASER_BALL_MIN_DIST && dist < LASER_BALL_MAX_DIST) {
+                    ballDistance = dist;
+                    ballPhase = PHASE_BALL_FOUND;
+                } else {
+                    // Ball nicht mehr da?
+                    lcdPrint("Ball verloren!", "Neuer Scan...");
+                    delay(1000);
+                    ballPhase = PHASE_INIT;
+                }
             }
             break;
             
