@@ -8,25 +8,28 @@
 // MAIN.CPP - Kompletter Ablauf mit HuskyLens
 // =============================================================================
 // Ablauf:
-// 1. Linienfolger bis HuskyLens rote Linie sieht
-// 2. Ins Ballfeld fahren
-// 3. Ball suchen (HuskyLens) und anfahren (Laser)
-// 4. Ball aufnehmen (Servo halbe Höhe)
-// 5. Box suchen (grüne Box für grünen Ball, rote Box für gelben Ball)
-// 6. Seitlich an Box positionieren
-// 7. Ball abwerfen (Servo ganz hoch)
-// 8. Zweiten Ball holen
-// 9. Fertig!
+// 1. Linienfolger (Greifer OBEN) bis HuskyLens rote Linie sieht
+// 2. Greifer runter + ins Ballfeld fahren
+// 3. Ball suchen (HuskyLens) - Roboter dreht bis Ball zentriert
+// 4. Ball anfahren (Laser) - fährt auf Greifposition
+// 5. Farbe validieren (RGB-Sensor am Greifer)
+// 6. Ball aufnehmen (Servo halbe Höhe)
+// 7. Box suchen (grüne Box für grünen Ball, rote Box für gelben Ball)
+// 8. Seitlich an Box positionieren
+// 9. Ball abwerfen (Servo ganz hoch)
+// 10. Zweiten Ball holen
+// 11. Fertig!
 // =============================================================================
 
 // ===== HAUPT-MODI =====
 enum Mode { 
     MODE_STOPPED, 
-    MODE_RUNNING,           // Linienfolger
+    MODE_RUNNING,           // Linienfolger (Greifer oben!)
     MODE_DEBUG, 
     MODE_MANEUVERING,
     MODE_BALL_SEARCH,       // Ball suchen mit HuskyLens
     MODE_BALL_APPROACH,     // Auf Ball zufahren mit Laser
+    MODE_BALL_VALIDATE,     // Farbe mit RGB validieren
     MODE_BALL_PICKUP,       // Ball aufnehmen
     MODE_BOX_SEARCH,        // Box suchen mit HuskyLens
     MODE_BOX_APPROACH,      // Auf Box zufahren
@@ -46,7 +49,8 @@ enum Menu {
 };
 
 // ===== GLOBALE VARIABLEN =====
-static Mode mode = MODE_STOPPED;
+// WICHTIG: volatile weil 'mode' sowohl in der ISR als auch im Hauptcode verwendet wird!
+static volatile Mode mode = MODE_STOPPED;
 static Menu menu = MENU_START;
 static unsigned long lastTurnTime = 0;
 static unsigned long lastLcdUpdate = 0;
@@ -54,7 +58,8 @@ static unsigned long modeStartTime = 0;
 
 // Ballsuche Variablen
 static int ballsCollected = 0;          // 0, 1 oder 2
-static BallColor currentBallColor = COLOR_UNKNOWN;
+static BallColor currentBallColor = COLOR_UNKNOWN;      // Von HuskyLens erkannt
+static BallColor validatedBallColor = COLOR_UNKNOWN;    // Von RGB bestätigt
 static int targetBoxID = 0;
 
 // Rote Linie Erkennung
@@ -72,6 +77,7 @@ const char* menuName(Menu m);
 void startBallSearchMode();
 void runBallSearch();
 void runBallApproach();
+void runBallValidate();
 void runBallPickup();
 void runBoxSearch();
 void runBoxApproach();
@@ -81,6 +87,7 @@ void runReturnToField();
 
 // ===== MOTOR ISR =====
 void motorISR() {
+    // mode ist jetzt volatile - wird immer aus RAM gelesen
     if (mode == MODE_RUNNING || mode == MODE_BALL_SEARCH || 
         mode == MODE_BALL_APPROACH || mode == MODE_BOX_SEARCH ||
         mode == MODE_BOX_APPROACH) {
@@ -108,15 +115,22 @@ void setup() {
     
     lcdPrint("Init Sensoren", "...");
     
+    // Laser Sensoren
     bool laserOk = initLaser();
     bool laser2Ok = initLaser2();
     delay(200);
     
+    // RGB Sensoren
+    bool rgbOk = initRgbSensor();
+    bool rgb2Ok = initRgbSensor2();
+    delay(200);
+    
+    // HuskyLens
     bool huskyOk = initHuskyLens();
     delay(200);
     
     char line1[17], line2[17];
-    snprintf(line1, 17, "L:%s L2:%s", laserOk ? "OK" : "X", laser2Ok ? "OK" : "X");
+    snprintf(line1, 17, "L:%s RGB:%s", laserOk ? "OK" : "X", rgbOk ? "OK" : "X");
     snprintf(line2, 17, "Husky: %s", huskyOk ? "OK" : "ERR");
     lcdPrint(line1, line2);
     delay(2000);
@@ -124,7 +138,8 @@ void setup() {
     Timer1.initialize(50);
     Timer1.attachInterrupt(motorISR);
     
-    setServoDown();
+    // Greifer startet OBEN (für Linienfolger)
+    setServoUp();
     
     lcdPrint("MENUE:", "> START");
 }
@@ -145,7 +160,7 @@ void runStateMachine() {
         mode = MODE_STOPPED;
         stopMotors();
         disableMotors();
-        setServoDown();
+        setServoUp();  // Greifer hoch bei Stopp
         resetLogic();
         ballsCollected = 0;
         lcdPrint("GESTOPPT", "");
@@ -174,7 +189,7 @@ void runStateMachine() {
                     snprintf(l2, 17, "X:%d W:%d", ball.xCenter, ball.width);
                 } else if (huskySeesRedLine()) {
                     snprintf(l1, 17, "ROTE LINIE!");
-                    l2[0] = '\0';
+                    snprintf(l2, 17, "Dist:%dmm", readLaserDistance());
                 } else {
                     snprintf(l1, 17, "Suche...");
                     snprintf(l2, 17, "Dist:%dmm", readLaserDistance());
@@ -193,6 +208,10 @@ void runStateMachine() {
             
         case MODE_BALL_APPROACH:
             runBallApproach();
+            break;
+            
+        case MODE_BALL_VALIDATE:
+            runBallValidate();
             break;
             
         case MODE_BALL_PICKUP:
@@ -223,6 +242,7 @@ void runStateMachine() {
             lcdPrint("FERTIG!", "Beide Baelle!");
             stopMotors();
             disableMotors();
+            setServoUp();  // Greifer hoch am Ende
             delay(5000);
             mode = MODE_STOPPED;
             ballsCollected = 0;
@@ -232,7 +252,7 @@ void runStateMachine() {
 }
 
 // =============================================================================
-// LINIENFOLGER
+// LINIENFOLGER (Greifer bleibt OBEN!)
 // =============================================================================
 void runLineFollower() {
     updateSensors();
@@ -276,6 +296,7 @@ void runLineFollower() {
         if (!searchLine()) {
             mode = MODE_STOPPED;
             stopMotors();
+            setServoUp();
             lcdPrint("LINIE WEG!", "");
             delay(2000);
             return;
@@ -306,12 +327,18 @@ void runLineFollower() {
 }
 
 // =============================================================================
-// BALLSUCHE STARTEN
+// BALLSUCHE STARTEN - Greifer fährt RUNTER!
 // =============================================================================
 void startBallSearchMode() {
     mode = MODE_BALL_SEARCH;
     modeStartTime = millis();
     currentBallColor = COLOR_UNKNOWN;
+    validatedBallColor = COLOR_UNKNOWN;
+    
+    // *** WICHTIG: Greifer in Greifposition (unten) ***
+    lcdPrint("Greifer", "runter...");
+    setServoDown();
+    delay(800);  // Warten bis Servo in Position
     
     enableMotors();
     
@@ -320,15 +347,18 @@ void startBallSearchMode() {
                 SEARCH_ENTRY_DISTANCE * STEPS_PER_CM, 
                 SPEED_APPROACH);
     delay(500);
+    
+    lcdPrint("Suche Ball...", "");
 }
 
 // =============================================================================
-// BALL SUCHEN
+// BALL SUCHEN - HuskyLens erkennt Ball, Roboter dreht bis zentriert
 // =============================================================================
 void runBallSearch() {
     if (millis() - modeStartTime > SEARCH_TIMEOUT_MS) {
         lcdPrint("Timeout!", "Kein Ball");
         delay(2000);
+        setServoUp();  // Greifer hoch bei Abbruch
         mode = MODE_STOPPED;
         return;
     }
@@ -343,28 +373,39 @@ void runBallSearch() {
         snprintf(l2, 17, "Offset:%d", offset);
         lcdPrint(l1, l2);
         
+        // Ball zentriert?
         if (abs(offset) <= HUSKY_TOLERANCE_X) {
             stopMotors();
             delay(200);
             
+            // Farbe von HuskyLens merken (wird später mit RGB validiert)
             if (ball.id == HUSKY_ID_GREEN_BALL) {
                 currentBallColor = COLOR_GREEN;
-                targetBoxID = HUSKY_ID_GREEN_BOX;
-            } else {
+            } else if (ball.id == HUSKY_ID_YELLOW_BALL) {
                 currentBallColor = COLOR_YELLOW;
-                targetBoxID = HUSKY_ID_RED_BOX;
+            } else {
+                currentBallColor = COLOR_UNKNOWN;
             }
+            
+            char l1[17];
+            snprintf(l1, 17, "Farbe: %s", getColorName(currentBallColor));
+            lcdPrint(l1, "-> Anfahren");
+            delay(500);
             
             mode = MODE_BALL_APPROACH;
             modeStartTime = millis();
         } else {
+            // Drehen bis Ball zentriert
             if (offset > 0) {
+                // Ball ist rechts -> nach rechts drehen
                 setMotorSpeeds(SPEED_SEARCH, -SPEED_SEARCH);
             } else {
+                // Ball ist links -> nach links drehen
                 setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
             }
         }
     } else {
+        // Kein Ball gefunden -> weiter drehen und suchen
         if (millis() - lastLcdUpdate > 300) {
             lcdPrint("Suche Ball...", "Drehe...");
             lastLcdUpdate = millis();
@@ -374,7 +415,7 @@ void runBallSearch() {
 }
 
 // =============================================================================
-// BALL ANFAHREN
+// BALL ANFAHREN - Laser misst Distanz, fährt auf Greifposition
 // =============================================================================
 void runBallApproach() {
     uint16_t dist = readLaserDistance();
@@ -387,36 +428,118 @@ void runBallApproach() {
         lastLcdUpdate = millis();
     }
     
+    // Während Anfahrt: HuskyLens zur Kurskorrektur nutzen
     HuskyResult ball = huskyFindBall();
     if (ball.found) {
         int offset = huskyGetCenterOffset(ball);
         float correction = offset * 0.5;
         setMotorSpeeds(SPEED_APPROACH - correction, SPEED_APPROACH + correction);
     } else {
+        // Ball nicht mehr sichtbar -> geradeaus weiter
         setMotorSpeeds(SPEED_APPROACH, SPEED_APPROACH);
     }
     
+    // Zieldistanz erreicht?
     if (dist > 0 && dist <= LASER_TARGET_DIST + LASER_APPROACH_TOLERANCE) {
         stopMotors();
-        mode = MODE_BALL_PICKUP;
+        lcdPrint("Position OK", "Validiere...");
+        delay(300);
+        
+        mode = MODE_BALL_VALIDATE;
         modeStartTime = millis();
     }
     
+    // Sicherheit: Falls zu nah
     if (dist > 0 && dist < LASER_TARGET_DIST - 20) {
         stopMotors();
-        mode = MODE_BALL_PICKUP;
+        lcdPrint("Zu nah!", "Validiere...");
+        delay(300);
+        
+        mode = MODE_BALL_VALIDATE;
+        modeStartTime = millis();
+    }
+    
+    // Timeout
+    if (millis() - modeStartTime > 10000) {
+        stopMotors();
+        lcdPrint("Timeout!", "Anfahrt");
+        delay(1000);
+        mode = MODE_BALL_SEARCH;  // Nochmal suchen
         modeStartTime = millis();
     }
 }
 
 // =============================================================================
-// BALL AUFNEHMEN
+// BALL VALIDIEREN - RGB-Sensor am Greifer prüft Farbe
+// =============================================================================
+void runBallValidate() {
+    lcdPrint("RGB Messung...", "");
+    delay(200);
+    
+    // RGB-Sensor aktivieren und messen
+    enableRgbSensor();
+    delay(100);
+    
+    // Mehrere Messungen für Stabilität
+    BallColor measurements[3];
+    for (int i = 0; i < 3; i++) {
+        measurements[i] = detectBallColor();
+        delay(50);
+    }
+    
+    // Mehrheitsentscheidung
+    int greenCount = 0, yellowCount = 0;
+    for (int i = 0; i < 3; i++) {
+        if (measurements[i] == COLOR_GREEN) greenCount++;
+        if (measurements[i] == COLOR_YELLOW) yellowCount++;
+    }
+    
+    if (greenCount >= 2) {
+        validatedBallColor = COLOR_GREEN;
+    } else if (yellowCount >= 2) {
+        validatedBallColor = COLOR_YELLOW;
+    } else {
+        validatedBallColor = measurements[0];  // Fallback: erste Messung
+    }
+    
+    // Vergleich mit HuskyLens
+    char l1[17], l2[17];
+    snprintf(l1, 17, "RGB: %s", getColorName(validatedBallColor));
+    
+    if (validatedBallColor == currentBallColor) {
+        snprintf(l2, 17, "Bestaetigt!");
+    } else if (validatedBallColor != COLOR_UNKNOWN) {
+        snprintf(l2, 17, "Korrigiert!");
+        // RGB-Sensor vertrauen (näher am Ball!)
+        currentBallColor = validatedBallColor;
+    } else {
+        snprintf(l2, 17, "HuskyLens nutzen");
+        // Falls RGB unsicher, HuskyLens-Ergebnis behalten
+    }
+    
+    lcdPrint(l1, l2);
+    delay(1500);
+    
+    // Ziel-Box basierend auf finaler Farbe setzen
+    if (currentBallColor == COLOR_GREEN) {
+        targetBoxID = HUSKY_ID_GREEN_BOX;
+    } else {
+        targetBoxID = HUSKY_ID_RED_BOX;  // Gelber Ball -> Rote Box
+    }
+    
+    mode = MODE_BALL_PICKUP;
+    modeStartTime = millis();
+}
+
+// =============================================================================
+// BALL AUFNEHMEN - Greifer auf halbe Höhe
 // =============================================================================
 void runBallPickup() {
     char l1[17], l2[17];
     snprintf(l1, 17, "Ball: %s", getColorName(currentBallColor));
     lcdPrint(l1, "Aufnehmen...");
     
+    // Greifer auf halbe Höhe (Ball halten)
     setServoHalf();
     delay(1000);
     
@@ -435,6 +558,7 @@ void runBoxSearch() {
     if (millis() - modeStartTime > BOX_SEARCH_TIMEOUT_MS) {
         lcdPrint("Timeout!", "Keine Box");
         delay(2000);
+        setServoUp();  // Ball fallen lassen
         mode = MODE_STOPPED;
         return;
     }
@@ -511,6 +635,15 @@ void runBoxApproach() {
         mode = MODE_BOX_POSITION;
         modeStartTime = millis();
     }
+    
+    // Timeout
+    if (millis() - modeStartTime > 15000) {
+        stopMotors();
+        lcdPrint("Timeout!", "Box Anfahrt");
+        delay(1000);
+        mode = MODE_BOX_SEARCH;
+        modeStartTime = millis();
+    }
 }
 
 // =============================================================================
@@ -564,10 +697,6 @@ void runBallDrop() {
     setServoUp();
     delay(1500);
     
-    // Servo wieder runter
-    setServoDown();
-    delay(500);
-    
     ballsCollected++;
     
     char l1[17];
@@ -601,6 +730,15 @@ void runReturnToField() {
     // Etwas vorfahren
     executeSteps(15 * STEPS_PER_CM, 15 * STEPS_PER_CM, SPEED_APPROACH);
     delay(300);
+    
+    // Greifer wieder runter für zweiten Ball
+    lcdPrint("Greifer", "runter...");
+    setServoDown();
+    delay(800);
+    
+    // Reset Farben
+    currentBallColor = COLOR_UNKNOWN;
+    validatedBallColor = COLOR_UNKNOWN;
     
     // Wieder Ball suchen
     mode = MODE_BALL_SEARCH;
@@ -689,6 +827,7 @@ void executeMenu(Menu item) {
             resetLogic();
             enableMotors();
             ballsCollected = 0;
+            setServoUp();  // Greifer OBEN beim Linienfolger!
             mode = MODE_RUNNING;
             break;
             
@@ -709,12 +848,15 @@ void executeMenu(Menu item) {
             lcdPrint("TEST", "Rechts 90");
             executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);
             delay(500);
-            lcdPrint("TEST", "Servo");
+            lcdPrint("TEST", "Servo Unten");
+            setServoDown();
+            delay(1000);
+            lcdPrint("TEST", "Servo Halb");
             setServoHalf();
             delay(1000);
+            lcdPrint("TEST", "Servo Oben");
             setServoUp();
             delay(1000);
-            setServoDown();
             stopMotors();
             lcdPrint("MENUE:", menuName(menu));
             break;
