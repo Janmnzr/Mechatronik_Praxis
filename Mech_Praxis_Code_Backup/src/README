@@ -1,0 +1,182 @@
+# HuskyLens Kamera - Anleitung zum Anlernen der Farben
+
+## Übersicht
+
+Der HuskyLens muss **vor dem ersten Einsatz** alle Farben lernen, die er erkennen soll. Die Farben werden mit festen IDs gespeichert, die im Code verwendet werden.
+
+### Benötigte Farb-IDs
+
+| ID | Objekt | Beschreibung |
+|----|--------|--------------|
+| 1 | Rote Linie | Querlinie am Parcour-Ende |
+| 2 | Grüner Ball | Erster Balltyp |
+| 3 | Gelber Ball | Zweiter Balltyp |
+| 4 | Grüne Box | Ziel für grünen Ball |
+| 5 | Rote Box | Ziel für gelben Ball |
+
+---
+
+## Schritt-für-Schritt Anleitung
+
+### 1. HuskyLens einschalten
+
+- HuskyLens an Strom anschließen (über I2C-Kabel am Multiplexer oder separates USB-Kabel)
+- Warten bis das Display aktiv ist
+
+### 2. Modus auf "Color Recognition" stellen
+
+1. **Funktionsrad drehen** (das kleine Rad an der Seite)
+2. Durch die Modi scrollen bis **"Color Recognition"** angezeigt wird
+3. **Funktionsrad kurz drücken** um den Modus zu bestätigen
+
+> Das Display zeigt jetzt ein Fadenkreuz in der Mitte
+
+### 3. Erste Farbe anlernen (ID 1 = Rote Linie)
+
+1. **Rotes Objekt** (z.B. rotes Klebeband oder rote Linie) vor die Kamera halten
+2. Das Objekt sollte das **Fadenkreuz in der Mitte** ausfüllen
+3. **Lernknopf gedrückt halten** (der große Knopf an der Oberseite)
+4. Während du hältst: Kamera leicht bewegen, um verschiedene Winkel/Lichtverhältnisse zu erfassen
+5. **Lernknopf loslassen** wenn "Learning completed" erscheint
+
+> Die rote Farbe ist jetzt als **ID 1** gespeichert
+
+### 4. Weitere Farben anlernen (ID 2-5)
+
+Für jede weitere Farbe:
+
+1. **Funktionsrad kurz drücken** → "Learn Multiple" oder "+1" Symbol erscheint
+2. Nächstes Objekt vor die Kamera halten
+3. **Lernknopf gedrückt halten** und Objekt aus verschiedenen Winkeln zeigen
+4. **Loslassen** wenn gelernt
+
+**Reihenfolge einhalten!**
+
+| Schritt | Objekt | Resultierende ID |
+|---------|--------|------------------|
+| 1 | Rote Linie | ID 1 |
+| 2 | Grüner Ball | ID 2 |
+| 3 | Gelber Ball | ID 3 |
+| 4 | Grüne Box | ID 4 |
+| 5 | Rote Box | ID 5 |
+
+### 5. Speichern
+
+Die gelernten Farben werden **automatisch gespeichert** und bleiben auch nach dem Ausschalten erhalten.
+
+---
+
+## Tipps für bessere Erkennung
+
+### Beleuchtung
+- Am besten bei **gleichmäßigem Licht** anlernen
+- Vermeide direktes Sonnenlicht oder starke Schatten
+- Wenn möglich: Bei ähnlichen Lichtverhältnissen anlernen wie beim Wettkampf
+
+### Abstand
+- Objekte beim Anlernen in **verschiedenen Abständen** zeigen (10cm - 50cm)
+- Das verbessert die Erkennung bei unterschiedlichen Entfernungen
+
+### Winkel
+- Objekt beim Anlernen **leicht drehen und kippen**
+- So lernt die Kamera verschiedene Perspektiven
+
+### Hintergrund
+- Beim Anlernen einen **neutralen Hintergrund** verwenden
+- Nicht vor bunten Objekten anlernen
+
+---
+
+## Gelerntes überprüfen
+
+Nach dem Anlernen kannst du testen:
+
+1. Objekt vor die Kamera halten
+2. Auf dem Display sollte ein **farbiger Rahmen** um das Objekt erscheinen
+3. Die **ID-Nummer** wird angezeigt (z.B. "ID:1" für rote Linie)
+
+### Im Debug-Modus des Roboters
+
+1. Im Menü **"Debug"** auswählen
+2. Das LCD zeigt an:
+   - `Ball ID:X` wenn ein Ball erkannt wird
+   - `ROTE LINIE!` wenn die rote Linie erkannt wird
+   - `Suche...` wenn nichts erkannt wird
+
+---
+
+## Farben neu anlernen / zurücksetzen
+
+Falls die Erkennung nicht gut funktioniert:
+
+### Einzelne Farbe neu lernen
+1. Funktionsrad **lange drücken** (ca. 3 Sekunden)
+2. "Forget learned" auswählen
+3. Alle Farben neu anlernen (Reihenfolge beachten!)
+
+### Komplett zurücksetzen
+1. Funktionsrad **sehr lange drücken** (ca. 5 Sekunden)
+2. "Factory Reset" bestätigen
+3. Alle Einstellungen und gelernten Farben werden gelöscht
+
+---
+
+## Häufige Probleme
+
+### Problem: Farbe wird nicht erkannt
+- **Lösung:** Bei besseren Lichtverhältnissen neu anlernen
+- **Lösung:** Mehr Winkel und Abstände beim Anlernen zeigen
+
+### Problem: Falsche Farbe wird erkannt
+- **Lösung:** Farben sind zu ähnlich → deutlichere Farben verwenden
+- **Lösung:** Alle Farben löschen und neu anlernen
+
+### Problem: "ID:0" wird angezeigt
+- **Lösung:** Objekt wurde nicht richtig gelernt → neu anlernen
+
+### Problem: Kamera reagiert nicht
+- **Lösung:** I2C-Verbindung prüfen (SDA/SCL am richtigen Multiplexer-Kanal?)
+- **Lösung:** Stromversorgung prüfen (HuskyLens braucht ca. 200mA)
+
+---
+
+## Technische Details
+
+### I2C Konfiguration im Code
+
+```cpp
+#define MUX_CHANNEL_HUSKYLENS  2       // Multiplexer Kanal 2
+#define HUSKYLENS_ADDRESS      0x32    // Standard I2C Adresse
+```
+
+### Farb-IDs im Code
+
+```cpp
+#define HUSKY_ID_RED_LINE    1      // Rote Linie (Parcour-Ende)
+#define HUSKY_ID_GREEN_BALL  2      // Grüner Ball
+#define HUSKY_ID_YELLOW_BALL 3      // Gelber Ball
+#define HUSKY_ID_GREEN_BOX   4      // Grüne Box
+#define HUSKY_ID_RED_BOX     5      // Rote Box
+```
+
+### Erkennungsparameter
+
+```cpp
+#define HUSKY_CENTER_X      160     // Bildmitte X (320px Breite)
+#define HUSKY_CENTER_Y      120     // Bildmitte Y (240px Höhe)
+#define HUSKY_TOLERANCE_X   25      // Toleranz für "zentriert"
+#define HUSKY_MIN_SIZE      15      // Minimale Objektgröße in Pixeln
+```
+
+---
+
+## Checkliste vor dem Start
+
+- [ ] HuskyLens im Modus "Color Recognition"
+- [ ] ID 1: Rote Linie angelernt
+- [ ] ID 2: Grüner Ball angelernt
+- [ ] ID 3: Gelber Ball angelernt
+- [ ] ID 4: Grüne Box angelernt
+- [ ] ID 5: Rote Box angelernt
+- [ ] Alle Farben im Debug-Modus getestet
+- [ ] Erkennung bei Wettkampf-Beleuchtung geprüft

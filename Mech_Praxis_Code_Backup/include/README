@@ -1,0 +1,364 @@
+# Anschlussplan - Arduino Mega 2560
+
+## Übersicht
+
+Dieser Plan zeigt alle Verbindungen zwischen dem Arduino Mega und den Komponenten des Linienfolger-Roboters mit Ballsuche.
+
+---
+
+## Pinbelegung Arduino Mega
+
+### Digitale Pins
+
+| Pin | Komponente | Funktion | Kabelfarbe (Vorschlag) |
+|-----|------------|----------|------------------------|
+| 4 | QTR-8RC | IR Emitter (LED Steuerung) | Orange |
+| 12 | Servo | PWM Signal (Greifer) | Gelb |
+| 20 | I2C | SDA (Daten) | Blau |
+| 21 | I2C | SCL (Takt) | Grün |
+| 22 | Stepper Driver | ENABLE (beide Motoren) | Weiß |
+| 38 | Stepper Links | STEP | Grau |
+| 39 | Stepper Links | DIR | Violett |
+| 40 | Stepper Rechts | STEP | Grau |
+| 41 | Stepper Rechts | DIR | Violett |
+
+### Analoge Pins
+
+| Pin | Komponente | Funktion |
+|-----|------------|----------|
+| A0 | Button DOWN | Taster (gegen GND) |
+| A1 | Button UP | Taster (gegen GND) |
+| A3 | Button SELECT | Taster (gegen GND) |
+| A8 | QTR-8RC | Sensor 1 (ganz rechts) |
+| A9 | QTR-8RC | Sensor 2 |
+| A10 | QTR-8RC | Sensor 3 |
+| A11 | QTR-8RC | Sensor 4 |
+| A12 | QTR-8RC | Sensor 5 |
+| A13 | QTR-8RC | Sensor 6 |
+| A14 | QTR-8RC | Sensor 7 |
+| A15 | QTR-8RC | Sensor 8 (ganz links) |
+
+### Stromversorgung
+
+| Pin | Verbindung |
+|-----|------------|
+| 5V | Servo VCC, Buttons (Pull-up intern), QTR VCC |
+| 3.3V | TCA9548A VCC (optional, kann auch 5V) |
+| GND | Alle GND Verbindungen |
+| VIN | Externe Stromversorgung (7-12V) |
+
+---
+
+## I2C Multiplexer (TCA9548A)
+
+Der Multiplexer ermöglicht es, mehrere I2C-Geräte mit gleicher Adresse zu verwenden.
+
+### Multiplexer Anschlüsse
+
+```
+TCA9548A
+┌─────────────────┐
+│ VIN        GND  │ ← 3.3V oder 5V / GND
+│ SDA        SCL  │ ← Arduino Pin 20 / Pin 21
+│                 │
+│ SD0/SC0    (NC) │ ← Kanal 0: Nicht belegt
+│ SD1/SC1        │ ← Kanal 1: LCD Display
+│ SD2/SC2        │ ← Kanal 2: HuskyLens
+│ SD3/SC3        │ ← Kanal 3: VL53L0X Laser (Front)
+│ SD4/SC4        │ ← Kanal 4: TCS34725 RGB (Greifer)
+│ SD5/SC5        │ ← Kanal 5: VL53L0X Laser (Seite)
+│ SD6/SC6        │ ← Kanal 6: TCS34725 RGB (Seite)
+│ SD7/SC7    (NC) │ ← Kanal 7: Nicht belegt
+│                 │
+│ A0  A1  A2      │ ← Alle auf GND = Adresse 0x70
+└─────────────────┘
+```
+
+### Kanal-Zuordnung
+
+| Kanal | Gerät | I2C Adresse | Funktion |
+|-------|-------|-------------|----------|
+| 0 | - | - | Nicht belegt |
+| 1 | LCD 16x2 | 0x27 (oder 0x3F) | Display |
+| 2 | HuskyLens | 0x32 | Kamera |
+| 3 | VL53L0X #1 | 0x29 | Laser Front |
+| 4 | TCS34725 #1 | 0x29 | RGB Greifer |
+| 5 | VL53L0X #2 | 0x29 | Laser Seite |
+| 6 | TCS34725 #2 | 0x29 | RGB Seite |
+| 7 | - | - | Nicht belegt |
+
+---
+
+## Detaillierte Anschlüsse pro Komponente
+
+### 1. Stepper Motoren (A4988 oder DRV8825)
+
+```
+STEPPER DRIVER LINKS          STEPPER DRIVER RECHTS
+┌──────────────────┐          ┌──────────────────┐
+│ ENABLE ──────────┼────┬─────┼── ENABLE         │
+│ MS1    ──┐       │    │     │       ┌── MS1    │
+│ MS2    ──┼─ VCC  │    │     │  VCC ─┼── MS2    │  (1/8 Microstepping)
+│ MS3    ──┘       │    │     │       └── MS3    │
+│ RESET  ─── VCC   │    │     │   VCC ─── RESET  │
+│ SLEEP  ─── VCC   │    │     │   VCC ─── SLEEP  │
+│ STEP   ─── Pin38 │    │     │ Pin40 ─── STEP   │
+│ DIR    ─── Pin39 │    │     │ Pin41 ─── DIR    │
+│                  │    │     │                  │
+│ VMOT   ─── 12V   │    │     │   12V ─── VMOT   │
+│ GND    ─── GND   │   GND    │   GND ─── GND    │
+│ 2B ────┐         │    │     │         ┌──── 2B │
+│ 2A ────┼─ Motor  │    │     │  Motor ─┼──── 2A │
+│ 1A ────┤         │    │     │         ├──── 1A │
+│ 1B ────┘         │    │     │         └──── 1B │
+└──────────────────┘    │     └──────────────────┘
+                        │
+                    Pin 22 (ENABLE, active LOW)
+```
+
+### 2. QTR-8RC Liniensensor
+
+```
+QTR-8RC Sensor Array
+┌─────────────────────────────────────────────────┐
+│  S1    S2    S3    S4    S5    S6    S7    S8   │
+│  │     │     │     │     │     │     │     │    │
+│  A8    A9   A10   A11   A12   A13   A14   A15   │
+│                                                  │
+│  VCC ─────────────────────────────────── 5V     │
+│  GND ─────────────────────────────────── GND    │
+│  LED (Emitter) ──────────────────────── Pin 4   │
+└─────────────────────────────────────────────────┘
+     RECHTS ◄─────────────────────────► LINKS
+              (Fahrtrichtung vorne)
+```
+
+### 3. Servo (Greifer)
+
+```
+Servo Motor
+┌─────────┐
+│ Signal ─┼─── Pin 12 (PWM)
+│ VCC ────┼─── 5V (oder separates 5V Netzteil bei großem Servo)
+│ GND ────┼─── GND
+└─────────┘
+
+Positionen im Code:
+- SERVO_MIN_POS (0°)   = Greifer unten (Greifposition)
+- SERVO_HALF_POS (90°) = Greifer halb (Ball halten)
+- SERVO_MAX_POS (180°) = Greifer oben (Ball abwerfen / Transport)
+```
+
+### 4. LCD Display (I2C, 16x2)
+
+```
+LCD mit I2C Backpack (PCF8574)
+┌─────────────┐
+│ VCC ────────┼─── 5V
+│ GND ────────┼─── GND
+│ SDA ────────┼─── TCA9548A Kanal 1 (SD1)
+│ SCL ────────┼─── TCA9548A Kanal 1 (SC1)
+└─────────────┘
+
+I2C Adresse: 0x27 (Standard) oder 0x3F (manche Module)
+```
+
+### 5. HuskyLens Kamera
+
+```
+HuskyLens (I2C Modus)
+┌─────────────┐
+│ VCC ────────┼─── 5V (braucht ~200mA!)
+│ GND ────────┼─── GND
+│ SDA ────────┼─── TCA9548A Kanal 2 (SD2)
+│ SCL ────────┼─── TCA9548A Kanal 2 (SC2)
+└─────────────┘
+
+I2C Adresse: 0x32
+Jumper auf Rückseite: I2C Modus auswählen!
+```
+
+### 6. VL53L0X Laser Sensoren (2x)
+
+```
+VL53L0X #1 (Front)              VL53L0X #2 (Seite)
+┌─────────────┐                 ┌─────────────┐
+│ VIN ────────┼─── 5V           │ VIN ────────┼─── 5V
+│ GND ────────┼─── GND          │ GND ────────┼─── GND
+│ SDA ────────┼─── MUX K3 SD3   │ SDA ────────┼─── MUX K5 SD5
+│ SCL ────────┼─── MUX K3 SC3   │ SCL ────────┼─── MUX K5 SC5
+│ XSHUT (NC)  │                 │ XSHUT (NC)  │
+│ GPIO1 (NC)  │                 │ GPIO1 (NC)  │
+└─────────────┘                 └─────────────┘
+
+I2C Adresse: 0x29 (beide gleich, daher Multiplexer nötig)
+```
+
+### 7. TCS34725 RGB Sensoren (2x)
+
+```
+TCS34725 #1 (Greifer)           TCS34725 #2 (Seite)
+┌─────────────┐                 ┌─────────────┐
+│ VIN ────────┼─── 5V           │ VIN ────────┼─── 5V
+│ GND ────────┼─── GND          │ GND ────────┼─── GND
+│ SDA ────────┼─── MUX K4 SD4   │ SDA ────────┼─── MUX K6 SD6
+│ SCL ────────┼─── MUX K4 SC4   │ SCL ────────┼─── MUX K6 SC6
+│ LED ────────┼─── VIN (an)     │ LED ────────┼─── VIN (an)
+│ INT (NC)    │                 │ INT (NC)    │
+└─────────────┘                 └─────────────┘
+
+I2C Adresse: 0x29 (beide gleich, daher Multiplexer nötig)
+LED Pin: Mit VIN verbinden für dauerhafte Beleuchtung
+```
+
+### 8. Taster (Buttons)
+
+```
+Taster mit internem Pull-Up (INPUT_PULLUP)
+
+        Arduino                    Taster
+    ┌───────────┐              ┌─────────┐
+    │           │              │         │
+    │   A0  ────┼──────────────┼─┤ DOWN  │
+    │           │              │ └───┬───┘
+    │   A1  ────┼──────────────┼─┤ UP    │
+    │           │              │ └───┬───┘
+    │   A3  ────┼──────────────┼─┤SELECT │
+    │           │              │ └───┬───┘
+    │           │              │     │
+    │   GND ────┼──────────────┼─────┴─────── GND
+    │           │              │
+    └───────────┘              └─────────┘
+
+Logik: HIGH = nicht gedrückt, LOW = gedrückt
+RESET-Taster: Direkt zwischen RESET und GND am Arduino
+```
+
+---
+
+## Stromversorgung
+
+### Empfohlenes Setup
+
+```
+                    ┌─────────────────────────────────┐
+                    │         NETZTEIL 12V            │
+                    │         (min. 3A)               │
+                    └───────────┬─────────────────────┘
+                                │
+            ┌───────────────────┼───────────────────┐
+            │                   │                   │
+            ▼                   ▼                   ▼
+    ┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+    │ Stepper Driver│   │ Stepper Driver│   │  Arduino VIN  │
+    │    VMOT       │   │    VMOT       │   │   (7-12V)     │
+    └───────────────┘   └───────────────┘   └───────────────┘
+                                                    │
+                                                    ▼
+                                            ┌───────────────┐
+                                            │  5V Regler    │
+                                            │  (onboard)    │
+                                            └───────┬───────┘
+                                                    │
+                    ┌───────────────────────────────┼───────┐
+                    │               │               │       │
+                    ▼               ▼               ▼       ▼
+              ┌─────────┐    ┌─────────┐    ┌─────────┐ ┌───────┐
+              │  Servo  │    │HuskyLens│    │ Sensoren│ │  LCD  │
+              └─────────┘    └─────────┘    └─────────┘ └───────┘
+```
+
+### Wichtige Hinweise
+
+1. **Stepper-Motoren** brauchen 12V am VMOT Pin
+2. **HuskyLens** zieht bis zu 200mA - bei Problemen separates 5V Netzteil verwenden
+3. **Servo** bei größerer Last ggf. mit separatem 5V/2A Netzteil versorgen
+4. **Gemeinsame Masse (GND)** für alle Komponenten!
+
+---
+
+## Verdrahtungsdiagramm (Übersicht)
+
+```
+                              ARDUINO MEGA 2560
+    ┌──────────────────────────────────────────────────────────────┐
+    │                                                              │
+    │  [5V]──┬──────┬──────┬──────┬──────┬──────┐                 │
+    │        │      │      │      │      │      │                 │
+    │      Servo   MUX    LCD   Husky  VL53  TCS34                │
+    │                │                                             │
+    │  [GND]─┴──────┴──────┴──────┴──────┴──────┴─── Alle GND     │
+    │                                                              │
+    │  [20/SDA]────────────────────┐                              │
+    │  [21/SCL]─────────────────┐  │                              │
+    │                           │  │                              │
+    │  [VIN]◄── 12V Netzteil    │  │                              │
+    │                           │  │                              │
+    │  [22]─────── ENABLE ──────┼──┼────► Stepper Driver          │
+    │  [38]─────── STEP L ──────┼──┼────► Stepper Links           │
+    │  [39]─────── DIR L ───────┼──┼────► Stepper Links           │
+    │  [40]─────── STEP R ──────┼──┼────► Stepper Rechts          │
+    │  [41]─────── DIR R ───────┼──┼────► Stepper Rechts          │
+    │                           │  │                              │
+    │  [4]──────── EMITTER ─────┼──┼────► QTR-8RC LED             │
+    │  [12]─────── SERVO ───────┼──┼────► Greifer Servo           │
+    │                           │  │                              │
+    │  [A0]─────── BTN DOWN ────┼──┼────► Taster                  │
+    │  [A1]─────── BTN UP ──────┼──┼────► Taster                  │
+    │  [A3]─────── BTN SELECT ──┼──┼────► Taster                  │
+    │                           │  │                              │
+    │  [A8-A15]─── QTR 1-8 ─────┼──┼────► QTR-8RC Sensoren        │
+    │                           │  │                              │
+    └───────────────────────────┼──┼──────────────────────────────┘
+                                │  │
+                          ┌─────┴──┴─────┐
+                          │  TCA9548A    │
+                          │  I2C MUX     │
+                          │              │
+                          │ K1 ──► LCD   │
+                          │ K2 ──► Husky │
+                          │ K3 ──► Laser1│
+                          │ K4 ──► RGB1  │
+                          │ K5 ──► Laser2│
+                          │ K6 ──► RGB2  │
+                          └──────────────┘
+```
+
+---
+
+## Checkliste Verdrahtung
+
+### Vor dem ersten Einschalten:
+
+- [ ] Alle GND miteinander verbunden
+- [ ] 12V NUR an Stepper VMOT und Arduino VIN
+- [ ] 5V an Sensoren, LCD, Servo, HuskyLens
+- [ ] I2C: SDA an Pin 20, SCL an Pin 21
+- [ ] Multiplexer Adress-Jumper (A0, A1, A2) auf GND
+- [ ] Stepper MS1/MS2/MS3 für 1/8 Microstepping konfiguriert
+- [ ] QTR Emitter an Pin 4
+- [ ] Servo Signal an Pin 12
+- [ ] Keine Kurzschlüsse zwischen Kabeln
+
+### Nach dem Einschalten prüfen:
+
+- [ ] LCD zeigt Startmeldung
+- [ ] HuskyLens Display aktiv
+- [ ] Motoren reagieren im Motor-Test Menü
+- [ ] Servo bewegt sich im Motor-Test Menü
+- [ ] Debug-Modus zeigt Laser-Distanz
+- [ ] Taster reagieren
+
+---
+
+## Troubleshooting
+
+| Problem | Mögliche Ursache | Lösung |
+|---------|------------------|--------|
+| LCD bleibt dunkel | Falsche I2C-Adresse | 0x3F statt 0x27 probieren |
+| Motoren zucken nur | ENABLE nicht LOW | Pin 22 Verbindung prüfen |
+| Motoren laufen nicht | VMOT fehlt | 12V an Stepper Driver |
+| HuskyLens reagiert nicht | Falscher Modus | I2C Jumper auf Rückseite |
+| Laser zeigt 0 | MUX Kanal falsch | Kanal 3/5 Verdrahtung prüfen |
+| RGB erkennt nichts | LED aus | LED Pin mit VIN verbinden |
+| Sensoren alle 0 | Emitter aus | Pin 4 Verbindung prüfen |
