@@ -110,16 +110,18 @@ void setup() {
     initButtons();
     initSensors();
     initMotors();
+    initServo();    // Servo initialisieren
     initLogic();
     
     // Laser initialisieren (RGB erst später bei Bedarf)
     lcdPrint("Init Laser...", "");
     bool laserOk = initLaser();
+    bool laser2Ok = initLaser2();  // Seitlicher Laser
     delay(500);
     
     // Status anzeigen
     char line2[17];
-    snprintf(line2, 17, "Laser: %s", laserOk ? "OK" : "ERR");
+    snprintf(line2, 17, "L1:%s L2:%s", laserOk ? "OK" : "X", laser2Ok ? "OK" : "X");
     lcdPrint("Sensoren:", line2);
     delay(1500);
     
@@ -569,9 +571,17 @@ void readBallColor() {
     snprintf(l2, 17, "%s", getColorName(savedBallColor));
     lcdPrint(l1, l2);
     
+    // ===== SERVO AUF HALBE HÖHE FAHREN =====
+    lcdPrint("Greifer...", "Halbe Hoehe");
+    setServoHalf();
+    delay(1000);
+    
     ballPhase = PHASE_COMPLETE;
     
-    delay(3000);
+    // Ergebnis nochmal anzeigen
+    snprintf(l1, 17, "Farbe: %s", getColorName(savedBallColor));
+    lcdPrint(l1, "Greifer OK!");
+    delay(2000);
     
     // Zurück zum Menü
     mode = MODE_STOPPED;

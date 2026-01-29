@@ -13,14 +13,13 @@
 #define DIR_PIN_L       39
 #define STEP_PIN_L      38
 #define ENABLE_PIN      22
+// MS1/MS2/MS3 Pins sind jetzt direkt an Spannung angeschlossen (1/8 Microstepping)
 
-// Microstepping Pins (A4988/DRV8825)
-#define MS1_PIN_1       36
-#define MS2_PIN_1       34
-#define MS3_PIN_1       32
-#define MS1_PIN_2       37
-#define MS2_PIN_2       35
-#define MS3_PIN_2       33
+// ===== SERVO MOTOR =====
+#define SERVO_PIN       12
+#define SERVO_MIN_POS   0       // Minimale Position (Grad)
+#define SERVO_MAX_POS   180     // Maximale Position (Grad)
+#define SERVO_HALF_POS  90      // Halbe Höhe (Grad)
 
 // ===== QTR-8RC SENSOR PINS =====
 #define QTR_PIN_1       A8
@@ -40,10 +39,12 @@
 // SDA = Pin 20, SCL = Pin 21 (Arduino Mega)
 // =============================================================================
 
-#define MUX_ADDRESS     0x70    // Standard I2C Adresse TCA9548A
-#define MUX_CHANNEL_DISPLAY  1  // SD1/SC1 - LCD Display (0x27)
-#define MUX_CHANNEL_LASER    3  // SD3/SC3 - VL53L1X Laser (0x29)
-#define MUX_CHANNEL_RGB      4  // SD4/SC4 - TCS34725 RGB (0x29)
+#define MUX_ADDRESS          0x70    // Standard I2C Adresse TCA9548A
+#define MUX_CHANNEL_DISPLAY  1       // SD1/SC1 - LCD Display (0x27)
+#define MUX_CHANNEL_LASER    3       // SD3/SC3 - VL53L0X Laser vorne (0x29)
+#define MUX_CHANNEL_RGB      4       // SD4/SC4 - TCS34725 RGB vorne (0x29)
+#define MUX_CHANNEL_LASER2   5       // SD5/SC5 - VL53L0X Laser seitlich (0x29)
+#define MUX_CHANNEL_RGB2     6       // SD6/SC6 - TCS34725 RGB seitlich (0x29)
 
 // ===== LCD I2C (über Multiplexer) =====
 #define LCD_I2C_ADDRESS 0x27    // Standard PCF8574 I2C Adresse (ggf. 0x3F probieren)
@@ -95,9 +96,9 @@
 // Im Gegensatz zu Schwarz (>750) und Weiß (<50)
 // =============================================================================
 
-#define RED_LINE_MIN        70      // Minimaler Wert für Rot-Erkennung
-#define RED_LINE_MAX        300     // Maximaler Wert für Rot-Erkennung (erhöht!)
-#define RED_LINE_MIN_SENSORS 5      // Mindestens 4 Sensoren müssen im Bereich sein
+#define RED_LINE_MIN        50      // Minimaler Wert für Rot-Erkennung
+#define RED_LINE_MAX        400     // Maximaler Wert für Rot-Erkennung (erhöht!)
+#define RED_LINE_MIN_SENSORS 4      // Mindestens 4 Sensoren müssen im Bereich sein
 #define RED_LINE_CONFIRM_MS  80     // Bestätigungszeit für rote Linie (kürzer!)
 
 // =============================================================================
@@ -124,7 +125,7 @@
 // --- VL53L1X LASER SENSOR ---
 #define LASER_TIMING_BUDGET_MS  50      // Messzeit (höher = genauer)
 #define LASER_MAX_RANGE_MM      1200    // Maximale Reichweite
-#define LASER_BALL_DETECT_JUMP  150     // Sprung in mm der Ball signalisiert
+#define LASER_BALL_DETECT_JUMP  100     // Sprung in mm der Ball signalisiert
 #define LASER_BALL_MIN_DIST     30      // Minimale Ball-Distanz in mm
 #define LASER_BALL_MAX_DIST     500     // Maximale Ball-Distanz in mm
 #define LASER_TARGET_DIST       50      // Zieldistanz zum Ball in mm (Greifer-Position)
@@ -138,7 +139,7 @@
 #define SEARCH_ROTATION_STEP_MS 100     // Zeit pro Rotationsschritt
 #define SEARCH_SCAN_SAMPLES     5       // Anzahl Samples pro Messposition
 #define SEARCH_MAX_ROTATIONS    2       // Maximale volle Umdrehungen
-#define SEARCH_ENTRY_DISTANCE   20      // Einfahrt ins Feld in cm (30cm)
+#define SEARCH_ENTRY_DISTANCE   30      // Einfahrt ins Feld in cm (30cm)
 #define BALL_VALIDATION_COUNT   3       // Ball muss 3x validiert werden
 
 // =============================================================================

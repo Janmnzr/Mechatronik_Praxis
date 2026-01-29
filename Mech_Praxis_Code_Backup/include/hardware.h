@@ -7,6 +7,7 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <VL53L0X.h>
+#include <Servo.h>
 
 // =============================================================================
 // HARDWARE.H - Alle "dummen" Hardware-Funktionen
@@ -18,6 +19,8 @@ extern AccelStepper motorL;
 extern AccelStepper motorR;
 extern LiquidCrystal_I2C lcd;
 extern VL53L0X laser;
+extern VL53L0X laser2;      // Seitlicher Laser
+extern Servo gripper;       // Greifer-Servo
 extern uint16_t sensorValues[8];
 
 // ===== BUTTON ENUM =====
@@ -60,6 +63,14 @@ void stopMotors();
 void executeSteps(int leftSteps, int rightSteps, int speed);
 
 // =============================================================================
+// SERVO FUNKTIONEN
+// =============================================================================
+
+void initServo();
+void setServoPosition(int degrees);
+void setServoHalf();        // Halbe Höhe
+
+// =============================================================================
 // SENSOR FUNKTIONEN
 // =============================================================================
 
@@ -84,15 +95,18 @@ void initButtons();
 Button readButton();
 
 // =============================================================================
-// VL53L0X LASER SENSOR
+// VL53L0X LASER SENSOR (Front + Seite)
 // =============================================================================
 
 bool initLaser();
+bool initLaser2();          // Seitlicher Laser
 uint16_t readLaserDistance();
+uint16_t readLaser2Distance();  // Seitlicher Laser
 bool isLaserReady();
+bool isLaser2Ready();
 
 // =============================================================================
-// TCS34725 RGB SENSOR (Manuell ohne Adafruit)
+// TCS34725 RGB SENSOR (Front + Seite) - Manuell ohne Adafruit
 // =============================================================================
 
 #define TCS34725_ADDRESS    0x29
@@ -104,9 +118,13 @@ bool isLaserReady();
 #define TCS34725_CDATAL     0x14
 
 bool initRgbSensor();
+bool initRgbSensor2();      // Seitlicher RGB
 void enableRgbSensor();
+void enableRgbSensor2();
 void readRgbValues(uint16_t* r, uint16_t* g, uint16_t* b, uint16_t* c);
+void readRgb2Values(uint16_t* r, uint16_t* g, uint16_t* b, uint16_t* c);  // Seitlich
 BallColor detectBallColor();
+BallColor detectBallColor2();   // Seitlich
 const char* getColorName(BallColor color);
 
 #endif // HARDWARE_H
