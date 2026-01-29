@@ -2,7 +2,7 @@
 #define CONFIG_H
 
 // =============================================================================
-// LINIENFOLGER V3 - ERWEITERTE KONFIGURATION MIT BALLSUCHE
+// LINIENFOLGER V3 - ERWEITERTE KONFIGURATION MIT BALLSUCHE & HUSKYLENS
 // =============================================================================
 // Alle Einstellungen an EINEM Ort. Keine versteckten Werte!
 // =============================================================================
@@ -17,8 +17,8 @@
 
 // ===== SERVO MOTOR =====
 #define SERVO_PIN       12
-#define SERVO_MIN_POS   0       // Minimale Position (Grad)
-#define SERVO_MAX_POS   180     // Maximale Position (Grad)
+#define SERVO_MIN_POS   0       // Minimale Position (Grad) - unten
+#define SERVO_MAX_POS   180     // Maximale Position (Grad) - ganz oben
 #define SERVO_HALF_POS  90      // Halbe Höhe (Grad)
 
 // ===== QTR-8RC SENSOR PINS =====
@@ -41,10 +41,14 @@
 
 #define MUX_ADDRESS          0x70    // Standard I2C Adresse TCA9548A
 #define MUX_CHANNEL_DISPLAY  1       // SD1/SC1 - LCD Display (0x27)
+#define MUX_CHANNEL_HUSKYLENS 2      // SD2/SC2 - HuskyLens Kamera (0x32)
 #define MUX_CHANNEL_LASER    3       // SD3/SC3 - VL53L0X Laser vorne (0x29)
 #define MUX_CHANNEL_RGB      4       // SD4/SC4 - TCS34725 RGB vorne (0x29)
 #define MUX_CHANNEL_LASER2   5       // SD5/SC5 - VL53L0X Laser seitlich (0x29)
 #define MUX_CHANNEL_RGB2     6       // SD6/SC6 - TCS34725 RGB seitlich (0x29)
+
+// ===== HUSKYLENS =====
+#define HUSKYLENS_ADDRESS   0x32    // Standard I2C Adresse HuskyLens
 
 // ===== LCD I2C (über Multiplexer) =====
 #define LCD_I2C_ADDRESS 0x27    // Standard PCF8574 I2C Adresse (ggf. 0x3F probieren)
@@ -70,6 +74,7 @@
 #define SPEED_TURN      350     // Geschwindigkeit für 90°-Drehungen
 #define SPEED_SEARCH    200     // Geschwindigkeit für Ballsuche-Drehung
 #define SPEED_APPROACH  250     // Geschwindigkeit beim Anfahren des Balls
+#define SPEED_SIDEWAYS  200     // Geschwindigkeit für seitliches Positionieren
 
 // ===== BESCHLEUNIGUNG =====
 #define ACCELERATION    800     // Steps/s² (sanfter Start)
@@ -90,16 +95,25 @@
 #define LINE_CENTER     3500    // Mitte der Linie (0-7000 Bereich)
 
 // =============================================================================
-// ROTE LINIE ERKENNUNG (Parkour-Ende)
+// HUSKYLENS FARB-IDs (müssen an der Kamera angelernt werden!)
 // =============================================================================
-// Rote Querlinie: Sensoren zeigen mittlere Werte (100-400)
-// Im Gegensatz zu Schwarz (>750) und Weiß (<50)
+// Anleitung zum Anlernen:
+// 1. Modus auf "Color Recognition" stellen (Scrollrad)
+// 2. Farbe vor Kamera halten, Lernknopf drücken
+// 3. Nächste Farbe: Scrollrad drücken, dann Lernknopf
 // =============================================================================
 
-#define RED_LINE_MIN        50      // Minimaler Wert für Rot-Erkennung
-#define RED_LINE_MAX        400     // Maximaler Wert für Rot-Erkennung (erhöht!)
-#define RED_LINE_MIN_SENSORS 4      // Mindestens 4 Sensoren müssen im Bereich sein
-#define RED_LINE_CONFIRM_MS  80     // Bestätigungszeit für rote Linie (kürzer!)
+#define HUSKY_ID_RED_LINE    1      // Rote Linie (Parcour-Ende)
+#define HUSKY_ID_GREEN_BALL  2      // Grüner Ball
+#define HUSKY_ID_YELLOW_BALL 3      // Gelber Ball
+#define HUSKY_ID_GREEN_BOX   4      // Grüne Box
+#define HUSKY_ID_RED_BOX     5      // Rote Box
+
+// Bildmitte für Ausrichtung (HuskyLens hat 320x240 Auflösung)
+#define HUSKY_CENTER_X      160
+#define HUSKY_CENTER_Y      120
+#define HUSKY_TOLERANCE_X   25      // Toleranz für "zentriert" in Pixeln
+#define HUSKY_MIN_SIZE      15      // Minimale Objektgröße für Erkennung
 
 // =============================================================================
 // SIGNAL-ERKENNUNG (Zeitbasiert)
@@ -117,30 +131,40 @@
 #define GREEN_CONFIRM_MS    200     // Bestätigungszeit für Grün-Erkennung
 #define SIGNAL_CONFIRM_MS   150     // Bestätigungszeit für geometrische Signale
 #define TURN_COOLDOWN_MS    1500    // Pause zwischen Abbiegungen
+#define RED_LINE_CONFIRM_MS 150     // HuskyLens muss rote Linie 150ms sehen
 
 // =============================================================================
-// BALLSUCHE KONFIGURATION
+// SPIELFELD & BALLSUCHE KONFIGURATION
 // =============================================================================
 
-// --- VL53L1X LASER SENSOR ---
+// --- SPIELFELD DIMENSIONEN (in cm) ---
+#define FIELD_LENGTH_CM     90      // Länge des Ballsuchbereichs
+#define FIELD_WIDTH_CM      120     // Breite des Ballsuchbereichs
+#define SEARCH_ENTRY_DISTANCE 25    // Einfahrt ins Feld in cm
+
+// --- BOX DIMENSIONEN (in cm) ---
+#define BOX_WALL_SIDE_CM    30      // Seiten an der Wand
+#define BOX_FIELD_SIDE_CM   40      // Seite ins Feld ragend
+
+// --- VL53L0X LASER SENSOR ---
 #define LASER_TIMING_BUDGET_MS  50      // Messzeit (höher = genauer)
 #define LASER_MAX_RANGE_MM      1200    // Maximale Reichweite
-#define LASER_BALL_DETECT_JUMP  100     // Sprung in mm der Ball signalisiert
 #define LASER_BALL_MIN_DIST     30      // Minimale Ball-Distanz in mm
-#define LASER_BALL_MAX_DIST     500     // Maximale Ball-Distanz in mm
+#define LASER_BALL_MAX_DIST     800     // Maximale Ball-Distanz in mm
 #define LASER_TARGET_DIST       50      // Zieldistanz zum Ball in mm (Greifer-Position)
 #define LASER_APPROACH_TOLERANCE 10     // Toleranz beim Anfahren (+/- mm)
+
+// --- BOX ANFAHRT ---
+#define BOX_FRONT_DIST_MM       80      // Frontaler Abstand zur Box (8cm)
+#define BOX_SIDE_DIST_MM        30      // Seitlicher Abstand zur Box (3cm)
 
 // --- TCS34725 RGB SENSOR ---
 #define RGB_INTEGRATION_TIME    50      // Integrationszeit in ms
 #define RGB_GAIN                4       // Gain (1, 4, 16, 60)
 
 // --- BALLSUCHE TIMING ---
-#define SEARCH_ROTATION_STEP_MS 100     // Zeit pro Rotationsschritt
-#define SEARCH_SCAN_SAMPLES     5       // Anzahl Samples pro Messposition
-#define SEARCH_MAX_ROTATIONS    2       // Maximale volle Umdrehungen
-#define SEARCH_ENTRY_DISTANCE   30      // Einfahrt ins Feld in cm (30cm)
-#define BALL_VALIDATION_COUNT   3       // Ball muss 3x validiert werden
+#define SEARCH_TIMEOUT_MS       30000   // Max 30 Sekunden pro Ball suchen
+#define BOX_SEARCH_TIMEOUT_MS   20000   // Max 20 Sekunden Box suchen
 
 // =============================================================================
 // MANÖVER-KONSTANTEN (berechnet aus Mechanik)

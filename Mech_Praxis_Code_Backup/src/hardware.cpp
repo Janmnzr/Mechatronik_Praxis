@@ -2,7 +2,7 @@
 #include "config.h"
 
 // =============================================================================
-// HARDWARE.CPP - VL53L0X, TCS34725, Servo - ohne MS Pins
+// HARDWARE.CPP - Mit HuskyLens Kamera
 // =============================================================================
 
 // ===== GLOBALE OBJEKTE =====
@@ -13,6 +13,7 @@ LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, LCD_COLS, LCD_ROWS);
 VL53L0X laser;
 VL53L0X laser2;
 Servo gripper;
+HUSKYLENS huskylens;
 uint16_t sensorValues[NUM_SENSORS];
 
 // ===== PRIVATE VARIABLEN =====
@@ -21,6 +22,7 @@ static bool laserInitialized = false;
 static bool laser2Initialized = false;
 static bool rgbInitialized = false;
 static bool rgb2Initialized = false;
+static bool huskyInitialized = false;
 
 // =============================================================================
 // I2C MULTIPLEXER FUNKTIONEN
@@ -28,7 +30,7 @@ static bool rgb2Initialized = false;
 
 void initMultiplexer() {
     Wire.begin();
-    Wire.setClock(100000);  // 100kHz für Stabilität
+    Wire.setClock(100000);
     disableMux();
     delay(10);
 }
@@ -48,14 +50,12 @@ void disableMux() {
 }
 
 // =============================================================================
-// MOTOR FUNKTIONEN (ohne MS Pins - direkt an Spannung)
+// MOTOR FUNKTIONEN
 // =============================================================================
 
 void initMotors() {
     pinMode(ENABLE_PIN, OUTPUT);
-    digitalWrite(ENABLE_PIN, HIGH);  // Motoren aus
-    
-    // MS Pins nicht mehr nötig - direkt an Spannung angeschlossen
+    digitalWrite(ENABLE_PIN, HIGH);
     
     motorL.setPinsInverted(true, false, false);
     motorR.setPinsInverted(true, false, false);
@@ -139,7 +139,7 @@ void executeSteps(int leftSteps, int rightSteps, int speed) {
 
 void initServo() {
     gripper.attach(SERVO_PIN);
-    gripper.write(SERVO_MIN_POS);  // Startposition
+    gripper.write(SERVO_MIN_POS);
     delay(500);
 }
 
@@ -152,8 +152,16 @@ void setServoHalf() {
     gripper.write(SERVO_HALF_POS);
 }
 
+void setServoUp() {
+    gripper.write(SERVO_MAX_POS);
+}
+
+void setServoDown() {
+    gripper.write(SERVO_MIN_POS);
+}
+
 // =============================================================================
-// SENSOR FUNKTIONEN
+// QTR SENSOR FUNKTIONEN
 // =============================================================================
 
 void initSensors() {
@@ -217,7 +225,7 @@ void initLCD() {
     lcd.backlight();
     lcd.clear();
     
-    lcdPrint("LINIENFOLGER V3", "Mit Ballsuche!");
+    lcdPrint("LINIENFOLGER V3", "HuskyLens!");
 }
 
 void lcdPrint(const char* line1, const char* line2) {
@@ -289,8 +297,7 @@ bool initLaser() {
         return false;
     }
     
-    laser.setMeasurementTimingBudget(20000);  // 20ms
-    
+    laser.setMeasurementTimingBudget(20000);
     laserInitialized = true;
     return true;
 }
@@ -329,8 +336,7 @@ bool initLaser2() {
         return false;
     }
     
-    laser2.setMeasurementTimingBudget(20000);  // 20ms
-    
+    laser2.setMeasurementTimingBudget(20000);
     laser2Initialized = true;
     return true;
 }
@@ -399,11 +405,11 @@ bool initRgbSensor() {
         return false;
     }
     
-    tcsWrite8(TCS34725_ATIME, 0xF6);  // 24ms
-    tcsWrite8(TCS34725_CONTROL, 0x01);  // 4x gain
-    tcsWrite8(TCS34725_ENABLE, 0x01);  // Power ON
+    tcsWrite8(TCS34725_ATIME, 0xF6);
+    tcsWrite8(TCS34725_CONTROL, 0x01);
+    tcsWrite8(TCS34725_ENABLE, 0x01);
     delay(3);
-    tcsWrite8(TCS34725_ENABLE, 0x03);  // Power ON + ADC Enable
+    tcsWrite8(TCS34725_ENABLE, 0x03);
     
     rgbInitialized = true;
     return true;
@@ -483,11 +489,11 @@ bool initRgbSensor2() {
         return false;
     }
     
-    tcsWrite8(TCS34725_ATIME, 0xF6);  // 24ms
-    tcsWrite8(TCS34725_CONTROL, 0x01);  // 4x gain
-    tcsWrite8(TCS34725_ENABLE, 0x01);  // Power ON
+    tcsWrite8(TCS34725_ATIME, 0xF6);
+    tcsWrite8(TCS34725_CONTROL, 0x01);
+    tcsWrite8(TCS34725_ENABLE, 0x01);
     delay(3);
-    tcsWrite8(TCS34725_ENABLE, 0x03);  // Power ON + ADC Enable
+    tcsWrite8(TCS34725_ENABLE, 0x03);
     
     rgb2Initialized = true;
     return true;
@@ -563,4 +569,115 @@ const char* getColorName(BallColor color) {
         case COLOR_WHITE:   return "WEISS";
         default:            return "???";
     }
+}
+
+// =============================================================================
+// HUSKYLENS KAMERA
+// =============================================================================
+
+bool initHuskyLens() {
+    selectMuxChannel(MUX_CHANNEL_HUSKYLENS);
+    delay(100);
+    
+    if (!huskylens.begin(Wire)) {
+        huskyInitialized = false;
+        return false;
+    }
+    
+    // Color Recognition Modus setzen
+    huskylens.writeAlgorithm(ALGORITHM_COLOR_RECOGNITION);
+    delay(100);
+    
+    huskyInitialized = true;
+    return true;
+}
+
+bool isHuskyLensReady() {
+    return huskyInitialized;
+}
+
+// Allgemeine Funktion: Objekt mit bestimmter ID suchen
+HuskyResult huskyFindByID(int id) {
+    HuskyResult result = {false, 0, 0, 0, 0, 0};
+    
+    if (!huskyInitialized) return result;
+    
+    selectMuxChannel(MUX_CHANNEL_HUSKYLENS);
+    delay(5);
+    
+    if (!huskylens.request()) return result;
+    if (!huskylens.isLearned()) return result;
+    
+    // Alle erkannten Objekte durchsuchen
+    while (huskylens.available()) {
+        HUSKYLENSResult huskyResult = huskylens.read();
+        
+        if (huskyResult.ID == id) {
+            // Prüfe Mindestgröße
+            if (huskyResult.width >= HUSKY_MIN_SIZE && huskyResult.height >= HUSKY_MIN_SIZE) {
+                result.found = true;
+                result.id = huskyResult.ID;
+                result.xCenter = huskyResult.xCenter;
+                result.yCenter = huskyResult.yCenter;
+                result.width = huskyResult.width;
+                result.height = huskyResult.height;
+                return result;
+            }
+        }
+    }
+    
+    return result;
+}
+
+// Rote Linie erkennen
+bool huskySeesRedLine() {
+    HuskyResult result = huskyFindByID(HUSKY_ID_RED_LINE);
+    
+    // Rote Linie muss breit sein (Querlinie!)
+    if (result.found && result.width > 100) {
+        return true;
+    }
+    return false;
+}
+
+// Irgendeinen Ball finden (grün oder gelb)
+HuskyResult huskyFindBall() {
+    // Erst grünen Ball suchen
+    HuskyResult result = huskyFindByID(HUSKY_ID_GREEN_BALL);
+    if (result.found) return result;
+    
+    // Dann gelben Ball
+    result = huskyFindByID(HUSKY_ID_YELLOW_BALL);
+    return result;
+}
+
+HuskyResult huskyFindGreenBall() {
+    return huskyFindByID(HUSKY_ID_GREEN_BALL);
+}
+
+HuskyResult huskyFindYellowBall() {
+    return huskyFindByID(HUSKY_ID_YELLOW_BALL);
+}
+
+HuskyResult huskyFindGreenBox() {
+    return huskyFindByID(HUSKY_ID_GREEN_BOX);
+}
+
+HuskyResult huskyFindRedBox() {
+    return huskyFindByID(HUSKY_ID_RED_BOX);
+}
+
+// Prüfen ob Objekt in Bildmitte ist
+bool huskyIsObjectCentered(HuskyResult result) {
+    if (!result.found) return false;
+    
+    int offset = abs(result.xCenter - HUSKY_CENTER_X);
+    return (offset <= HUSKY_TOLERANCE_X);
+}
+
+// Abweichung von Bildmitte berechnen (-160 bis +160)
+// Negativ = Objekt links, Positiv = Objekt rechts
+int huskyGetCenterOffset(HuskyResult result) {
+    if (!result.found) return 0;
+    return result.xCenter - HUSKY_CENTER_X;
 }
