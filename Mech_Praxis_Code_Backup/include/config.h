@@ -94,6 +94,14 @@
 #define LINE_THRESHOLD  750     // Ab diesem Wert = "Schwarz" erkannt
 #define LINE_CENTER     3500    // Mitte der Linie (0-7000 Bereich)
 
+// --- QTR Rote Linie (Backup falls HuskyLens ausfällt) ---
+#define RED_LINE_MIN            50      // Minimaler Wert für Rot-Erkennung
+#define RED_LINE_MAX            400     // Maximaler Wert für Rot-Erkennung
+#define RED_LINE_MIN_SENSORS    4       // Mindestens 4 Sensoren im Bereich
+
+// --- Ballsuche Laser-Sprung ---
+#define LASER_BALL_DETECT_JUMP  100     // Sprung in mm der Ball signalisiert
+
 // =============================================================================
 // HUSKYLENS FARB-IDs (müssen an der Kamera angelernt werden!)
 // =============================================================================

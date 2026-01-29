@@ -570,7 +570,7 @@ void runBallDrop() {
     
     ballsCollected++;
     
-    char l1[17], l2[17];
+    char l1[17];
     snprintf(l1, 17, "Ball %d fertig!", ballsCollected);
     lcdPrint(l1, "");
     delay(1000);

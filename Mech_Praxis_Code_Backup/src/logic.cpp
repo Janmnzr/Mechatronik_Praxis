@@ -121,7 +121,10 @@ bool isRedLineDetected() {
         if (val < minVal) minVal = val;
         if (val > maxVal) maxVal = val;
         
-        
+        // Rot: Werte zwischen 70-350
+        if (val >= RED_LINE_MIN && val <= RED_LINE_MAX) {
+            sensorsInRange++;
+        }
         // Schwarz: Werte über 750
         if (val > LINE_THRESHOLD) {
             sensorsBlack++;
@@ -143,13 +146,13 @@ bool isRedLineDetected() {
     // 4. Geringe Varianz (alle Sensoren ähnlich) - Range < 200
     // 5. Durchschnitt im mittleren Bereich (100-300)
     
-    
+    bool enoughInRange = (sensorsInRange >= RED_LINE_MIN_SENSORS);
     bool noBlack = (sensorsBlack <= 1);
     bool notAllWhite = (sensorsWhite < 6);
     bool lowVariance = (range < 250);
     bool avgInRange = (avg >= 80 && avg <= 350);
     
-    return (noBlack && notAllWhite && lowVariance && avgInRange);
+    return (enoughInRange && noBlack && notAllWhite && lowVariance && avgInRange);
 }
 
 bool isRedLineConfirmed() {
@@ -388,7 +391,8 @@ void updateBallSearch() {
                 int distJump = (int)prevLaserDist - (int)lastLaserDist;
                 
                 // Positiver Sprung = plötzlich näher = Ball erkannt
-                if (distJump > lastLaserDist >= LASER_BALL_MIN_DIST &&
+                if (distJump > LASER_BALL_DETECT_JUMP &&
+                    lastLaserDist >= LASER_BALL_MIN_DIST &&
                     lastLaserDist <= LASER_BALL_MAX_DIST) {
                     
                     ballDistance = lastLaserDist;
@@ -431,7 +435,8 @@ bool isBallDetected() {
     
     int distJump = (int)prevLaserDist - (int)lastLaserDist;
     
-    return (distJump > lastLaserDist >= LASER_BALL_MIN_DIST &&
+    return (distJump > LASER_BALL_DETECT_JUMP &&
+            lastLaserDist >= LASER_BALL_MIN_DIST &&
             lastLaserDist <= LASER_BALL_MAX_DIST);
 }
 
