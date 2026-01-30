@@ -17,8 +17,8 @@
 
 // ===== SERVO MOTOR =====
 #define SERVO_PIN       12
-#define SERVO_MIN_POS   10      // Minimale Position (Grad) - unten (etwas Abstand vom Anschlag)
-#define SERVO_MAX_POS   170     // Maximale Position (Grad) - oben (etwas Abstand vom Anschlag)
+#define SERVO_MIN_POS   25      // Minimale Position (Grad) - unten (etwas Abstand vom Anschlag)
+#define SERVO_MAX_POS   125     // Maximale Position (Grad) - oben (etwas Abstand vom Anschlag)
 #define SERVO_HALF_POS  90      // Halbe Höhe (Grad)
 
 // ===== QTR-8RC SENSOR PINS =====
@@ -40,12 +40,12 @@
 // =============================================================================
 
 #define MUX_ADDRESS          0x70    // Standard I2C Adresse TCA9548A
-#define MUX_CHANNEL_DISPLAY  1       // SD1/SC1 - LCD Display (0x27)
+#define MUX_CHANNEL_DISPLAY  1       // SD1/SC1 - LCD Display (0x21)
 #define MUX_CHANNEL_HUSKYLENS 2      // SD2/SC2 - HuskyLens Kamera (0x32)
-#define MUX_CHANNEL_LASER    3       // SD3/SC3 - VL53L0X Laser vorne (0x29)
+#define MUX_CHANNEL_LASER    0       // SD3/SC3 - VL53L0X Laser vorne (0x29)
 #define MUX_CHANNEL_RGB      4       // SD4/SC4 - TCS34725 RGB vorne (0x29)
 #define MUX_CHANNEL_LASER2   5       // SD5/SC5 - VL53L0X Laser seitlich (0x29)
-#define MUX_CHANNEL_RGB2     6       // SD6/SC6 - TCS34725 RGB seitlich (0x29)
+#define MUX_CHANNEL_RGB2     7       // SD6/SC6 - TCS34725 RGB seitlich (0x29)
 
 // ===== HUSKYLENS =====
 #define HUSKYLENS_ADDRESS   0x32    // Standard I2C Adresse HuskyLens
