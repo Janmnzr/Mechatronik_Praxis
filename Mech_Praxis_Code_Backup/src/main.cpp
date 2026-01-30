@@ -381,8 +381,8 @@ void runBallSearch() {
             // Farbe von HuskyLens merken (wird später mit RGB validiert)
             if (ball.id == HUSKY_ID_GREEN_BALL) {
                 currentBallColor = COLOR_GREEN;
-            } else if (ball.id == HUSKY_ID_YELLOW_BALL) {
-                currentBallColor = COLOR_YELLOW;
+            } else if (ball.id == HUSKY_ID_BLUE_BALL) {
+                currentBallColor = COLOR_BLUE;
             } else {
                 currentBallColor = COLOR_UNKNOWN;
             }
@@ -488,16 +488,16 @@ void runBallValidate() {
     }
     
     // Mehrheitsentscheidung
-    int greenCount = 0, yellowCount = 0;
+    int greenCount = 0, blueCount = 0;
     for (int i = 0; i < 3; i++) {
         if (measurements[i] == COLOR_GREEN) greenCount++;
-        if (measurements[i] == COLOR_YELLOW) yellowCount++;
+        if (measurements[i] == COLOR_BLUE) blueCount++;
     }
     
     if (greenCount >= 2) {
         validatedBallColor = COLOR_GREEN;
-    } else if (yellowCount >= 2) {
-        validatedBallColor = COLOR_YELLOW;
+    } else if (blueCount >= 2) {
+        validatedBallColor = COLOR_BLUE;
     } else {
         validatedBallColor = measurements[0];  // Fallback: erste Messung
     }

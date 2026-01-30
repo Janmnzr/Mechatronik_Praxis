@@ -2,7 +2,7 @@
 #include "config.h"
 
 // =============================================================================
-// HARDWARE.CPP - Mit HuskyLens Kamera
+// HARDWARE.CPP - Mit HuskyLens Kamera (Object Classification Modus)
 // =============================================================================
 
 // ===== GLOBALE OBJEKTE =====
@@ -225,7 +225,7 @@ void initLCD() {
     lcd.backlight();
     lcd.clear();
     
-    lcdPrint("LINIENFOLGER V3", "HuskyLens!");
+    lcdPrint("LINIENFOLGER V3", "ObjClassify!");
 }
 
 void lcdPrint(const char* line1, const char* line2) {
@@ -451,23 +451,28 @@ BallColor detectBallColor() {
     float gNorm = (g / sum) * 255;
     float bNorm = (b / sum) * 255;
     
+    // Rot erkennen
     if (rNorm > 120 && rNorm > gNorm * 1.5 && rNorm > bNorm * 1.5) {
         if (gNorm > 60) return COLOR_ORANGE;
         return COLOR_RED;
     }
     
+    // Grün erkennen
     if (gNorm > 100 && gNorm > rNorm * 1.3 && gNorm > bNorm * 1.3) {
         return COLOR_GREEN;
     }
     
+    // Blau erkennen
     if (bNorm > 100 && bNorm > rNorm * 1.3 && bNorm > gNorm * 1.3) {
         return COLOR_BLUE;
     }
     
+    // Gelb erkennen (falls noch gebraucht)
     if (rNorm > 80 && gNorm > 80 && bNorm < 70) {
         return COLOR_YELLOW;
     }
     
+    // Weiß erkennen
     if (c > 1000 && abs(rNorm - gNorm) < 30 && abs(gNorm - bNorm) < 30) {
         return COLOR_WHITE;
     }
@@ -572,7 +577,7 @@ const char* getColorName(BallColor color) {
 }
 
 // =============================================================================
-// HUSKYLENS KAMERA
+// HUSKYLENS KAMERA (Object Classification Modus!)
 // =============================================================================
 
 bool initHuskyLens() {
@@ -584,8 +589,8 @@ bool initHuskyLens() {
         return false;
     }
     
-    // Color Recognition Modus setzen
-    huskylens.writeAlgorithm(ALGORITHM_COLOR_RECOGNITION);
+    // Object Classification Modus setzen (erkennt Form + Farbe!)
+    huskylens.writeAlgorithm(ALGORITHM_OBJECT_CLASSIFICATION);
     delay(100);
     
     huskyInitialized = true;
@@ -640,14 +645,14 @@ bool huskySeesRedLine() {
     return false;
 }
 
-// Irgendeinen Ball finden (grün oder gelb)
+// Irgendeinen Ball finden (grün oder blau)
 HuskyResult huskyFindBall() {
     // Erst grünen Ball suchen
     HuskyResult result = huskyFindByID(HUSKY_ID_GREEN_BALL);
     if (result.found) return result;
     
-    // Dann gelben Ball
-    result = huskyFindByID(HUSKY_ID_YELLOW_BALL);
+    // Dann blauen Ball
+    result = huskyFindByID(HUSKY_ID_BLUE_BALL);
     return result;
 }
 
@@ -655,8 +660,8 @@ HuskyResult huskyFindGreenBall() {
     return huskyFindByID(HUSKY_ID_GREEN_BALL);
 }
 
-HuskyResult huskyFindYellowBall() {
-    return huskyFindByID(HUSKY_ID_YELLOW_BALL);
+HuskyResult huskyFindBlueBall() {
+    return huskyFindByID(HUSKY_ID_BLUE_BALL);
 }
 
 HuskyResult huskyFindGreenBox() {

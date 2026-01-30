@@ -17,8 +17,8 @@
 
 // ===== SERVO MOTOR =====
 #define SERVO_PIN       12
-#define SERVO_MIN_POS   0       // Minimale Position (Grad) - unten
-#define SERVO_MAX_POS   180     // Maximale Position (Grad) - ganz oben
+#define SERVO_MIN_POS   10      // Minimale Position (Grad) - unten (etwas Abstand vom Anschlag)
+#define SERVO_MAX_POS   170     // Maximale Position (Grad) - oben (etwas Abstand vom Anschlag)
 #define SERVO_HALF_POS  90      // Halbe Höhe (Grad)
 
 // ===== QTR-8RC SENSOR PINS =====
@@ -51,7 +51,7 @@
 #define HUSKYLENS_ADDRESS   0x32    // Standard I2C Adresse HuskyLens
 
 // ===== LCD I2C (über Multiplexer) =====
-#define LCD_I2C_ADDRESS 0x27    // Standard PCF8574 I2C Adresse (ggf. 0x3F probieren)
+#define LCD_I2C_ADDRESS 0x21    // Standard PCF8574 I2C Adresse (ggf. 0x3F probieren)
 #define LCD_COLS        16
 #define LCD_ROWS        2
 
@@ -103,17 +103,18 @@
 #define LASER_BALL_DETECT_JUMP  100     // Sprung in mm der Ball signalisiert
 
 // =============================================================================
-// HUSKYLENS FARB-IDs (müssen an der Kamera angelernt werden!)
+// HUSKYLENS OBJEKT-IDs (Object Classification Modus!)
 // =============================================================================
 // Anleitung zum Anlernen:
-// 1. Modus auf "Color Recognition" stellen (Scrollrad)
-// 2. Farbe vor Kamera halten, Lernknopf drücken
-// 3. Nächste Farbe: Scrollrad drücken, dann Lernknopf
+// 1. Modus auf "Object Classification" stellen (Scrollrad)
+// 2. "Learn Multiple" im Menü aktivieren
+// 3. Objekt vor Kamera halten, Lernknopf drücken
+// 4. Nächste ID: Scrollrad nach rechts drehen, dann Lernknopf
 // =============================================================================
 
 #define HUSKY_ID_RED_LINE    1      // Rote Linie (Parcour-Ende)
 #define HUSKY_ID_GREEN_BALL  2      // Grüner Ball
-#define HUSKY_ID_YELLOW_BALL 3      // Gelber Ball
+#define HUSKY_ID_BLUE_BALL   3      // Blauer Ball (war: gelber Ball)
 #define HUSKY_ID_GREEN_BOX   4      // Grüne Box
 #define HUSKY_ID_RED_BOX     5      // Rote Box
 

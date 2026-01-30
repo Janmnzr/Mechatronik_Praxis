@@ -151,10 +151,10 @@ bool isHuskyLensReady();
 // Rote Linie erkennen (für Parcour-Ende)
 bool huskySeesRedLine();
 
-// Ball suchen (grün oder gelb)
+// Ball suchen (grün oder blau)
 HuskyResult huskyFindBall();           // Findet irgendeinen Ball
 HuskyResult huskyFindGreenBall();
-HuskyResult huskyFindYellowBall();
+HuskyResult huskyFindBlueBall();       // War: huskyFindYellowBall
 
 // Box suchen
 HuskyResult huskyFindGreenBox();
