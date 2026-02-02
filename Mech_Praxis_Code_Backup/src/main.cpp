@@ -460,7 +460,7 @@ void runBallApproach() {
     }
     
     // Timeout
-    if (millis() - modeStartTime > 10000) {
+    if (millis() - modeStartTime > 20000) {
         stopMotors();
         lcdPrint("Timeout!", "Anfahrt");
         delay(1000);
@@ -652,37 +652,56 @@ void runBoxApproach() {
 void runBoxPosition() {
     lcdPrint("Positioniere", "seitlich...");
     
-    // 90° nach rechts drehen
-    executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);
+    // 90° nach LINKS drehen
+    executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);
     delay(300);
     
-    // Seitlich mit Laser auf 3cm Abstand fahren
-    lcdPrint("Seitlich", "anfahren...");
+    // Position mit seitlichem Laser prüfen
+    lcdPrint("Pruefe", "Position...");
     
     uint16_t sideDist = readLaser2Distance();
-    int attempts = 0;
     
-    while (attempts < 50) {
+    char l1[17], l2[17];
+    snprintf(l1, 17, "Seite: %dmm", sideDist);
+    
+    // Prüfen ob Abstand zur Box passt
+    if (sideDist > 0 && sideDist <= BOX_SIDE_DIST_MM + 50) {
+        snprintf(l2, 17, "Position OK!");
+        lcdPrint(l1, l2);
+        delay(1000);
+    } else {
+        // Seitlich korrigieren falls nötig
+        snprintf(l2, 17, "Korrigiere...");
+        lcdPrint(l1, l2);
+        
+        int attempts = 0;
+        while (attempts < 30) {
+            sideDist = readLaser2Distance();
+            
+            if (sideDist > 0 && sideDist <= BOX_SIDE_DIST_MM + 20) {
+                stopMotors();
+                break;
+            }
+            
+            // Langsam vorwärts fahren bis Box erkannt
+            setMotorSpeeds(SPEED_SIDEWAYS, SPEED_SIDEWAYS);
+            
+            unsigned long t = millis();
+            while (millis() - t < 100) {
+                runMotors();
+            }
+            
+            attempts++;
+        }
+        
+        stopMotors();
+        
+        // Finale Position anzeigen
         sideDist = readLaser2Distance();
-        
-        if (sideDist > 0 && sideDist <= BOX_SIDE_DIST_MM + 10) {
-            stopMotors();
-            break;
-        }
-        
-        // Langsam seitwärts fahren
-        setMotorSpeeds(SPEED_SIDEWAYS, SPEED_SIDEWAYS);
-        
-        unsigned long t = millis();
-        while (millis() - t < 100) {
-            runMotors();
-        }
-        
-        attempts++;
+        snprintf(l1, 17, "Final: %dmm", sideDist);
+        lcdPrint(l1, "Fertig!");
+        delay(1000);
     }
-    
-    stopMotors();
-    delay(300);
     
     mode = MODE_BALL_DROP;
 }
