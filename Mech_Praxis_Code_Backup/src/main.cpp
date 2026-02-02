@@ -432,8 +432,8 @@ void runBallApproach() {
     HuskyResult ball = huskyFindBall();
     if (ball.found) {
         int offset = huskyGetCenterOffset(ball);
-        float correction = offset * 0.5;
-        setMotorSpeeds(SPEED_APPROACH - correction, SPEED_APPROACH + correction);
+        float correction = offset * 0.6;
+        setMotorSpeeds(SPEED_APPROACH + correction, SPEED_APPROACH - correction);
     } else {
         // Ball nicht mehr sichtbar -> geradeaus weiter
         setMotorSpeeds(SPEED_APPROACH, SPEED_APPROACH);
@@ -624,8 +624,8 @@ void runBoxApproach() {
     
     if (box.found) {
         int offset = huskyGetCenterOffset(box);
-        float correction = offset * 0.3;
-        setMotorSpeeds(SPEED_APPROACH - correction, SPEED_APPROACH + correction);
+        float correction = offset * 0.1;
+        setMotorSpeeds(SPEED_APPROACH + correction, SPEED_APPROACH - correction);
     } else {
         setMotorSpeeds(SPEED_APPROACH, SPEED_APPROACH);
     }

@@ -140,7 +140,7 @@
 #define GREEN_CONFIRM_MS    200     // Bestätigungszeit für Grün-Erkennung
 #define SIGNAL_CONFIRM_MS   150     // Bestätigungszeit für geometrische Signale
 #define TURN_COOLDOWN_MS    1500    // Pause zwischen Abbiegungen
-#define RED_LINE_CONFIRM_MS 300     // HuskyLens muss rote Linie 150ms sehen
+#define RED_LINE_CONFIRM_MS 150     // HuskyLens muss rote Linie 150ms sehen
 
 // =============================================================================
 // SPIELFELD & BALLSUCHE KONFIGURATION
@@ -149,7 +149,7 @@
 // --- SPIELFELD DIMENSIONEN (in cm) ---
 #define FIELD_LENGTH_CM     90      // Länge des Ballsuchbereichs
 #define FIELD_WIDTH_CM      120     // Breite des Ballsuchbereichs
-#define SEARCH_ENTRY_DISTANCE 25    // Einfahrt ins Feld in cm
+#define SEARCH_ENTRY_DISTANCE 40    // Einfahrt ins Feld in cm
 
 // --- BOX DIMENSIONEN (in cm) ---
 #define BOX_WALL_SIDE_CM    30      // Seiten an der Wand
@@ -160,12 +160,12 @@
 #define LASER_MAX_RANGE_MM      1200    // Maximale Reichweite
 #define LASER_BALL_MIN_DIST     30      // Minimale Ball-Distanz in mm
 #define LASER_BALL_MAX_DIST     800     // Maximale Ball-Distanz in mm
-#define LASER_TARGET_DIST       75      // Zieldistanz zum Ball in mm (Greifer-Position)
+#define LASER_TARGET_DIST       65      // Zieldistanz zum Ball in mm (Greifer-Position)
 #define LASER_APPROACH_TOLERANCE 10     // Toleranz beim Anfahren (+/- mm)
 
 // --- BOX ANFAHRT ---
-#define BOX_FRONT_DIST_MM       80      // Frontaler Abstand zur Box (8cm)
-#define BOX_SIDE_DIST_MM        30      // Seitlicher Abstand zur Box (3cm)
+#define BOX_FRONT_DIST_MM       100      // Frontaler Abstand zur Box (8cm)
+#define BOX_SIDE_DIST_MM        35      // Seitlicher Abstand zur Box (3cm)
 
 // --- TCS34725 RGB SENSOR ---
 #define RGB_INTEGRATION_TIME    50      // Integrationszeit in ms
