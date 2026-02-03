@@ -11,15 +11,25 @@
 // 1. Linienfolger (Greifer OBEN) bis HuskyLens rote Linie sieht
 // 2. Greifer runter + ins Ballfeld fahren
 // 3. Ball suchen (HuskyLens) - Roboter dreht bis Ball zentriert
+//    - Ball 1: ORANGE (ID 2) → ROTE Box (ID 1)
+//    - Ball 2: BLAU (ID 3) → GRÜNE Box (ID 4)
 // 4. Ball anfahren (Laser) - fährt auf Greifposition
 // 5. Farbe validieren (RGB-Sensor am Greifer)
 // 6. Ball aufnehmen (Servo halbe Höhe)
-// 7. Box suchen (grüne Box für grünen Ball, rote Box für gelben Ball)
+// 7. Box suchen
 // 8. Seitlich an Box positionieren
 // 9. Ball abwerfen (Servo ganz hoch)
 // 10. Zweiten Ball holen
 // 11. Fertig!
 // =============================================================================
+
+// ===== HUSKYLENS IDs (lokal definiert) =====
+// WICHTIG: Rote Linie und Rote Box haben GLEICHE ID!
+#define HUSKY_ID_RED_LINE     1      // Rote Linie (Parcour-Ende)
+#define HUSKY_ID_ORANGE_BALL  2      // Orangener Ball (erster Ball)
+#define HUSKY_ID_BLUE_BALL    3      // Blauer Ball (zweiter Ball)
+#define HUSKY_ID_GREEN_BOX    4      // Grüne Box (für blauen Ball)
+#define HUSKY_ID_RED_BOX      1      // Rote Box (für orangenen Ball) - GLEICHE ID wie rote Linie!
 
 // ===== HAUPT-MODI =====
 enum Mode { 
@@ -353,6 +363,7 @@ void startBallSearchMode() {
 
 // =============================================================================
 // BALL SUCHEN - HuskyLens erkennt Ball, Roboter dreht bis zentriert
+// Ball 1: Orange suchen, Ball 2: Blau suchen
 // =============================================================================
 void runBallSearch() {
     if (millis() - modeStartTime > SEARCH_TIMEOUT_MS) {
@@ -363,13 +374,25 @@ void runBallSearch() {
         return;
     }
     
-    HuskyResult ball = huskyFindBall();
+    // Gezielt den richtigen Ball suchen
+    HuskyResult ball;
+    const char* searchColor;
+    
+    if (ballsCollected == 0) {
+        // Erster Ball: ORANGE suchen
+        ball = huskyFindOrangeBall();
+        searchColor = "ORANGE";
+    } else {
+        // Zweiter Ball: BLAU suchen
+        ball = huskyFindBlueBall();
+        searchColor = "BLAU";
+    }
     
     if (ball.found) {
         int offset = huskyGetCenterOffset(ball);
         
         char l1[17], l2[17];
-        snprintf(l1, 17, "Ball! ID:%d", ball.id);
+        snprintf(l1, 17, "%s Ball!", searchColor);
         snprintf(l2, 17, "Offset:%d", offset);
         lcdPrint(l1, l2);
         
@@ -379,8 +402,8 @@ void runBallSearch() {
             delay(200);
             
             // Farbe von HuskyLens merken (wird später mit RGB validiert)
-            if (ball.id == HUSKY_ID_GREEN_BALL) {
-                currentBallColor = COLOR_GREEN;
+            if (ball.id == HUSKY_ID_ORANGE_BALL) {
+                currentBallColor = COLOR_ORANGE;
             } else if (ball.id == HUSKY_ID_BLUE_BALL) {
                 currentBallColor = COLOR_BLUE;
             } else {
@@ -407,7 +430,9 @@ void runBallSearch() {
     } else {
         // Kein Ball gefunden -> weiter drehen und suchen
         if (millis() - lastLcdUpdate > 300) {
-            lcdPrint("Suche Ball...", "Drehe...");
+            char l1[17];
+            snprintf(l1, 17, "Suche %s", searchColor);
+            lcdPrint(l1, "Drehe...");
             lastLcdUpdate = millis();
         }
         setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
@@ -432,7 +457,10 @@ void runBallApproach() {
     HuskyResult ball = huskyFindBall();
     if (ball.found) {
         int offset = huskyGetCenterOffset(ball);
-        float correction = offset * 0.6;
+        // offset > 0 = Ball rechts -> rechts drehen -> linker Motor schneller
+        // offset < 0 = Ball links -> links drehen -> rechter Motor schneller
+        float correction = offset * 0.3;  // Reduzierter Faktor
+        // INVERTIERT: + auf links, - auf rechts
         setMotorSpeeds(SPEED_APPROACH + correction, SPEED_APPROACH - correction);
     } else {
         // Ball nicht mehr sichtbar -> geradeaus weiter
@@ -488,14 +516,14 @@ void runBallValidate() {
     }
     
     // Mehrheitsentscheidung
-    int greenCount = 0, blueCount = 0;
+    int orangeCount = 0, blueCount = 0;
     for (int i = 0; i < 3; i++) {
-        if (measurements[i] == COLOR_GREEN) greenCount++;
+        if (measurements[i] == COLOR_ORANGE) orangeCount++;
         if (measurements[i] == COLOR_BLUE) blueCount++;
     }
     
-    if (greenCount >= 2) {
-        validatedBallColor = COLOR_GREEN;
+    if (orangeCount >= 2) {
+        validatedBallColor = COLOR_ORANGE;
     } else if (blueCount >= 2) {
         validatedBallColor = COLOR_BLUE;
     } else {
@@ -521,10 +549,12 @@ void runBallValidate() {
     delay(1500);
     
     // Ziel-Box basierend auf finaler Farbe setzen
-    if (currentBallColor == COLOR_GREEN) {
-        targetBoxID = HUSKY_ID_GREEN_BOX;
+    // ORANGE Ball -> ROTE Box (ID 1)
+    // BLAUER Ball -> GRÜNE Box (ID 4)
+    if (currentBallColor == COLOR_ORANGE) {
+        targetBoxID = HUSKY_ID_RED_BOX;     // Rote Box
     } else {
-        targetBoxID = HUSKY_ID_RED_BOX;  // Gelber Ball -> Rote Box
+        targetBoxID = HUSKY_ID_GREEN_BOX;   // Grüne Box für blauen Ball
     }
     
     mode = MODE_BALL_PICKUP;
@@ -733,21 +763,23 @@ void runBallDrop() {
 }
 
 // =============================================================================
-// ZURÜCK INS FELD FÜR 2. BALL
+// ZURÜCK INS FELD FÜR 2. BALL - RÜCKWÄRTS MIT LINKSKURVE
 // =============================================================================
 void runReturnToField() {
     lcdPrint("Zurueck ins", "Feld...");
     
-    // Rückwärts von Box weg
-    executeSteps(-10 * STEPS_PER_CM, -10 * STEPS_PER_CM, SPEED_APPROACH);
+    // SCHRITT 1: Etwas rückwärts von der Box weg
+    //executeSteps(-5 * STEPS_PER_CM, -5 * STEPS_PER_CM, SPEED_APPROACH);
+    //delay(200);
+    
+    // SCHRITT 2: 90° nach links drehen
+    lcdPrint("Drehe links", "...");
+    executeSteps(STEPS_90_DEGREE, +STEPS_90_DEGREE, SPEED_TURN);
     delay(300);
     
-    // 90° nach links drehen (zurück Richtung Feld)
-    executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);
-    delay(300);
-    
-    // Etwas vorfahren
-    executeSteps(15 * STEPS_PER_CM, 15 * STEPS_PER_CM, SPEED_APPROACH);
+    // SCHRITT 3: RÜCKWÄRTS ins Ballfeld fahren
+    lcdPrint("Rueckwaerts", "ins Feld...");
+    executeSteps(-30 * STEPS_PER_CM, -30 * STEPS_PER_CM, SPEED_APPROACH);
     delay(300);
     
     // Greifer wieder runter für zweiten Ball
@@ -759,7 +791,8 @@ void runReturnToField() {
     currentBallColor = COLOR_UNKNOWN;
     validatedBallColor = COLOR_UNKNOWN;
     
-    // Wieder Ball suchen
+    // Wieder Ball suchen (Roboter dreht sich automatisch bis Ball gefunden)
+    lcdPrint("Suche Ball 2", "...");
     mode = MODE_BALL_SEARCH;
     modeStartTime = millis();
 }

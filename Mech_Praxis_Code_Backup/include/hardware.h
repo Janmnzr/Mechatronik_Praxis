@@ -151,14 +151,14 @@ bool isHuskyLensReady();
 // Rote Linie erkennen (für Parcour-Ende)
 bool huskySeesRedLine();
 
-// Ball suchen (grün oder blau)
+// Ball suchen (orange oder blau)
 HuskyResult huskyFindBall();           // Findet irgendeinen Ball
-HuskyResult huskyFindGreenBall();
-HuskyResult huskyFindBlueBall();       // War: huskyFindYellowBall
+HuskyResult huskyFindOrangeBall();     // Orangener Ball (ID 2)
+HuskyResult huskyFindBlueBall();       // Blauer Ball (ID 3)
 
 // Box suchen
-HuskyResult huskyFindGreenBox();
-HuskyResult huskyFindRedBox();
+HuskyResult huskyFindGreenBox();       // Grüne Box (ID 4)
+HuskyResult huskyFindRedBox();         // Rote Box (ID 1)
 
 // Allgemeine Funktion: Objekt mit bestimmter ID suchen
 HuskyResult huskyFindByID(int id);

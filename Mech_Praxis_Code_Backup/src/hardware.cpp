@@ -225,7 +225,7 @@ void initLCD() {
     lcd.backlight();
     lcd.clear();
     
-    lcdPrint("LINIENFOLGER V3", "ObjClassify!");
+    lcdPrint("LINIENFOLGER V3", "ColorRecog!");
 }
 
 void lcdPrint(const char* line1, const char* line2) {
@@ -589,8 +589,8 @@ bool initHuskyLens() {
         return false;
     }
     
-    // Object Classification Modus setzen (erkennt Form + Farbe!)
-    huskylens.writeAlgorithm(ALGORITHM_OBJECT_CLASSIFICATION);
+    // Color Recognition Modus setzen (nur Farbe, keine Objekte)
+    huskylens.writeAlgorithm(ALGORITHM_COLOR_RECOGNITION);
     delay(100);
     
     huskyInitialized = true;
@@ -647,17 +647,17 @@ bool huskySeesRedLine() {
 
 // Irgendeinen Ball finden (grün oder blau)
 HuskyResult huskyFindBall() {
-    // Erst grünen Ball suchen
-    HuskyResult result = huskyFindByID(HUSKY_ID_GREEN_BALL);
+    // Erst orangenen Ball suchen (1. Ball)
+    HuskyResult result = huskyFindByID(HUSKY_ID_ORANGE_BALL);
     if (result.found) return result;
     
-    // Dann blauen Ball
+    // Dann blauen Ball (2. Ball)
     result = huskyFindByID(HUSKY_ID_BLUE_BALL);
     return result;
 }
 
-HuskyResult huskyFindGreenBall() {
-    return huskyFindByID(HUSKY_ID_GREEN_BALL);
+HuskyResult huskyFindOrangeBall() {
+    return huskyFindByID(HUSKY_ID_ORANGE_BALL);
 }
 
 HuskyResult huskyFindBlueBall() {
@@ -669,7 +669,22 @@ HuskyResult huskyFindGreenBox() {
 }
 
 HuskyResult huskyFindRedBox() {
-    return huskyFindByID(HUSKY_ID_RED_BOX);
+    // WICHTIG: Rote Box hat gleiche ID wie rote Linie!
+    // Unterscheidung: Box ist quadratischer, Linie ist sehr breit
+    HuskyResult result = huskyFindByID(HUSKY_ID_RED_BOX);
+    
+    // Prüfe ob es eine Box ist (nicht zu breit im Verhältnis zur Höhe)
+    // Linie: width >> height (z.B. 200x30)
+    // Box: width ähnlich height (z.B. 80x60)
+    if (result.found) {
+        float ratio = (float)result.width / (float)result.height;
+        // Wenn Verhältnis > 3:1, ist es wahrscheinlich eine Linie, keine Box
+        if (ratio > 3.0) {
+            result.found = false;  // Ignoriere Linien-ähnliche Objekte
+        }
+    }
+    
+    return result;
 }
 
 // Prüfen ob Objekt in Bildmitte ist

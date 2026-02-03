@@ -17,8 +17,8 @@
 
 // ===== SERVO MOTOR =====
 #define SERVO_PIN       12
-#define SERVO_MIN_POS   25      // Minimale Position (Grad) - unten (etwas Abstand vom Anschlag)
-#define SERVO_MAX_POS   125     // Maximale Position (Grad) - oben (etwas Abstand vom Anschlag)
+#define SERVO_MIN_POS   10      // Minimale Position (Grad) - unten (etwas Abstand vom Anschlag)
+#define SERVO_MAX_POS   170     // Maximale Position (Grad) - oben (etwas Abstand vom Anschlag)
 #define SERVO_HALF_POS  90      // Halbe Höhe (Grad)
 
 // ===== QTR-8RC SENSOR PINS =====
@@ -40,18 +40,18 @@
 // =============================================================================
 
 #define MUX_ADDRESS          0x70    // Standard I2C Adresse TCA9548A
-#define MUX_CHANNEL_DISPLAY  1       // SD1/SC1 - LCD Display (0x21)
+#define MUX_CHANNEL_DISPLAY  1       // SD1/SC1 - LCD Display (0x27)
 #define MUX_CHANNEL_HUSKYLENS 2      // SD2/SC2 - HuskyLens Kamera (0x32)
-#define MUX_CHANNEL_LASER    0       // SD3/SC3 - VL53L0X Laser vorne (0x29)
+#define MUX_CHANNEL_LASER    3       // SD3/SC3 - VL53L0X Laser vorne (0x29)
 #define MUX_CHANNEL_RGB      4       // SD4/SC4 - TCS34725 RGB vorne (0x29)
 #define MUX_CHANNEL_LASER2   5       // SD5/SC5 - VL53L0X Laser seitlich (0x29)
-#define MUX_CHANNEL_RGB2     7       // SD6/SC6 - TCS34725 RGB seitlich (0x29)
+#define MUX_CHANNEL_RGB2     6       // SD6/SC6 - TCS34725 RGB seitlich (0x29)
 
 // ===== HUSKYLENS =====
 #define HUSKYLENS_ADDRESS   0x32    // Standard I2C Adresse HuskyLens
 
 // ===== LCD I2C (über Multiplexer) =====
-#define LCD_I2C_ADDRESS 0x21    // Standard PCF8574 I2C Adresse (ggf. 0x3F probieren)
+#define LCD_I2C_ADDRESS 0x21    // Dein LCD hat Adresse 0x21!
 #define LCD_COLS        16
 #define LCD_ROWS        2
 
@@ -103,20 +103,26 @@
 #define LASER_BALL_DETECT_JUMP  100     // Sprung in mm der Ball signalisiert
 
 // =============================================================================
-// HUSKYLENS OBJEKT-IDs (Object Classification Modus!)
+// HUSKYLENS OBJEKT-IDs (Color Recognition Modus!)
 // =============================================================================
 // Anleitung zum Anlernen:
-// 1. Modus auf "Object Classification" stellen (Scrollrad)
+// 1. Modus auf "Color Recognition" stellen (Scrollrad)
 // 2. "Learn Multiple" im Menü aktivieren
 // 3. Objekt vor Kamera halten, Lernknopf drücken
 // 4. Nächste ID: Scrollrad nach rechts drehen, dann Lernknopf
+//
+// AKTUELLE REIHENFOLGE:
+// ID 1: Rote Linie + Rote Box (gleiche Farbe!)
+// ID 2: Orangener Ball
+// ID 3: Blauer Ball
+// ID 4: Grüne Box
 // =============================================================================
 
-#define HUSKY_ID_RED_LINE    1      // Rote Linie (Parcour-Ende)
-#define HUSKY_ID_GREEN_BALL  2      // Grüner Ball
-#define HUSKY_ID_BLUE_BALL   3      // Blauer Ball (war: gelber Ball)
+#define HUSKY_ID_RED_LINE    1      // Rote Linie (Parcour-Ende) UND Rote Box!
+#define HUSKY_ID_ORANGE_BALL 2      // Orangener Ball (1. Ball)
+#define HUSKY_ID_BLUE_BALL   3      // Blauer Ball (2. Ball)
 #define HUSKY_ID_GREEN_BOX   4      // Grüne Box
-#define HUSKY_ID_RED_BOX     5      // Rote Box
+#define HUSKY_ID_RED_BOX     1      // Rote Box (gleiche ID wie rote Linie!)
 
 // Bildmitte für Ausrichtung (HuskyLens hat 320x240 Auflösung)
 #define HUSKY_CENTER_X      160
@@ -149,7 +155,7 @@
 // --- SPIELFELD DIMENSIONEN (in cm) ---
 #define FIELD_LENGTH_CM     90      // Länge des Ballsuchbereichs
 #define FIELD_WIDTH_CM      120     // Breite des Ballsuchbereichs
-#define SEARCH_ENTRY_DISTANCE 40    // Einfahrt ins Feld in cm
+#define SEARCH_ENTRY_DISTANCE 40    // Einfahrt ins Feld in cm (nach roter Linie)
 
 // --- BOX DIMENSIONEN (in cm) ---
 #define BOX_WALL_SIDE_CM    30      // Seiten an der Wand
@@ -160,12 +166,12 @@
 #define LASER_MAX_RANGE_MM      1200    // Maximale Reichweite
 #define LASER_BALL_MIN_DIST     30      // Minimale Ball-Distanz in mm
 #define LASER_BALL_MAX_DIST     800     // Maximale Ball-Distanz in mm
-#define LASER_TARGET_DIST       65      // Zieldistanz zum Ball in mm (Greifer-Position)
+#define LASER_TARGET_DIST       50      // Zieldistanz zum Ball in mm (Greifer-Position)
 #define LASER_APPROACH_TOLERANCE 10     // Toleranz beim Anfahren (+/- mm)
 
 // --- BOX ANFAHRT ---
-#define BOX_FRONT_DIST_MM       100      // Frontaler Abstand zur Box (8cm)
-#define BOX_SIDE_DIST_MM        35      // Seitlicher Abstand zur Box (3cm)
+#define BOX_FRONT_DIST_MM       80      // Frontaler Abstand zur Box (8cm)
+#define BOX_SIDE_DIST_MM        30      // Seitlicher Abstand zur Box (3cm)
 
 // --- TCS34725 RGB SENSOR ---
 #define RGB_INTEGRATION_TIME    50      // Integrationszeit in ms
