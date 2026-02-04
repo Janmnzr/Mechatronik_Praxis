@@ -321,14 +321,21 @@ void updatePID() {
 
     float correction = (adaptiveKP * error) + (adaptiveKD * smoothedDerivative);
 
-    // ASYMMETRIE-KORREKTUR: Rechte Seite braucht mehr Korrektur
+    // ASYMMETRIE-KORREKTUR: Rechte Seite braucht VIEL mehr Korrektur
     // error < 0 = Linie rechts (Sensoren 1-4) -> Korrektur verstärken
     if (error < 0) {
-        correction *= 1.4f;  // 40% mehr Korrektur für rechte Seite
+        // Je größer der Fehler, desto mehr Verstärkung
+        if (abs(error) > 2500) {
+            correction *= 2.0f;  // Doppelte Korrektur bei sehr großem Fehler
+        } else if (abs(error) > 1500) {
+            correction *= 1.7f;  // 70% mehr bei großem Fehler
+        } else {
+            correction *= 1.4f;  // 40% mehr bei normalem Fehler
+        }
     }
 
-    // Maximale Korrektur begrenzen
-    float maxCorr = smoothedSpeed * 1.5f;
+    // Maximale Korrektur NICHT zu stark begrenzen
+    float maxCorr = smoothedSpeed * 2.5f;
     correction = constrain(correction, -maxCorr, maxCorr);
 
     lastError = error;
@@ -336,9 +343,13 @@ void updatePID() {
     float leftSpeed = smoothedSpeed - correction;
     float rightSpeed = smoothedSpeed + correction;
 
-    // WICHTIG: Mindestgeschwindigkeit damit Roboter immer vorwärts fährt
-    // und nicht blockiert oder auf der Stelle dreht
-    const float MIN_SPEED = smoothedSpeed * 0.25f;  // Mind. 25% der Normalgeschwindigkeit
+    // Mindestgeschwindigkeit - niedriger für stärkere Kurven
+    // Bei großem Fehler darf ein Rad fast stoppen
+    float minSpeedFactor = 0.15f;  // 15% Mindestgeschwindigkeit
+    if (abs(error) > 2500) {
+        minSpeedFactor = 0.05f;    // Bei sehr großem Fehler nur 5%
+    }
+    const float MIN_SPEED = smoothedSpeed * minSpeedFactor;
 
     // Begrenze auf gültige Werte, aber mit Mindestgeschwindigkeit
     leftSpeed = constrain(leftSpeed, MIN_SPEED, SPEED_MAX);
