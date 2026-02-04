@@ -19,7 +19,7 @@
 #define SERVO_PIN       12
 #define SERVO_MIN_POS   10      // Minimale Position (Grad) - unten (etwas Abstand vom Anschlag)
 #define SERVO_MAX_POS   170     // Maximale Position (Grad) - oben (etwas Abstand vom Anschlag)
-#define SERVO_HALF_POS  90      // Halbe Höhe (Grad)
+#define SERVO_HALF_POS  80      // Halbe Höhe (Grad)
 
 // ===== QTR-8RC SENSOR PINS =====
 #define QTR_PIN_1       A8
@@ -42,7 +42,7 @@
 #define MUX_ADDRESS          0x70    // Standard I2C Adresse TCA9548A
 #define MUX_CHANNEL_DISPLAY  1       // SD1/SC1 - LCD Display (0x27)
 #define MUX_CHANNEL_HUSKYLENS 2      // SD2/SC2 - HuskyLens Kamera (0x32)
-#define MUX_CHANNEL_LASER    3       // SD3/SC3 - VL53L0X Laser vorne (0x29)
+#define MUX_CHANNEL_LASER    0       // SD3/SC3 - VL53L0X Laser vorne (0x29)
 #define MUX_CHANNEL_RGB      4       // SD4/SC4 - TCS34725 RGB vorne (0x29)
 #define MUX_CHANNEL_LASER2   5       // SD5/SC5 - VL53L0X Laser seitlich (0x29)
 #define MUX_CHANNEL_RGB2     6       // SD6/SC6 - TCS34725 RGB seitlich (0x29)
@@ -146,7 +146,7 @@
 #define GREEN_CONFIRM_MS    200     // Bestätigungszeit für Grün-Erkennung
 #define SIGNAL_CONFIRM_MS   150     // Bestätigungszeit für geometrische Signale
 #define TURN_COOLDOWN_MS    1500    // Pause zwischen Abbiegungen
-#define RED_LINE_CONFIRM_MS 150     // HuskyLens muss rote Linie 150ms sehen
+#define RED_LINE_CONFIRM_MS 140     // HuskyLens muss rote Linie 150ms sehen
 
 // =============================================================================
 // SPIELFELD & BALLSUCHE KONFIGURATION
@@ -166,11 +166,11 @@
 #define LASER_MAX_RANGE_MM      1200    // Maximale Reichweite
 #define LASER_BALL_MIN_DIST     30      // Minimale Ball-Distanz in mm
 #define LASER_BALL_MAX_DIST     800     // Maximale Ball-Distanz in mm
-#define LASER_TARGET_DIST       50      // Zieldistanz zum Ball in mm (Greifer-Position)
+#define LASER_TARGET_DIST       70      // Zieldistanz zum Ball in mm (Greifer-Position)
 #define LASER_APPROACH_TOLERANCE 10     // Toleranz beim Anfahren (+/- mm)
 
 // --- BOX ANFAHRT ---
-#define BOX_FRONT_DIST_MM       80      // Frontaler Abstand zur Box (8cm)
+#define BOX_FRONT_DIST_MM       90      // Frontaler Abstand zur Box (8cm)
 #define BOX_SIDE_DIST_MM        30      // Seitlicher Abstand zur Box (3cm)
 
 // --- TCS34725 RGB SENSOR ---
