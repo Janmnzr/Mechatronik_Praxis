@@ -293,6 +293,7 @@ void updatePID() {
 
     float error = position - LINE_CENTER;
 
+    // Deadzone nur für kleine Fehler - verhindert Zittern in der Mitte
     if (abs(error) < PID_DEADZONE) {
         error = 0;
     }
@@ -301,18 +302,33 @@ void updatePID() {
     if (dt < 0.001f) dt = 0.001f;
     lastPidTime = now;
 
-    float speedFactor = smoothedSpeed / (float)SPEED_NORMAL;
-    float adaptiveKP = PID_KP * (0.8f + 0.4f * speedFactor);
-    float adaptiveKD = PID_KD * (0.8f + 0.3f * speedFactor);
+    // Adaptive PID-Parameter
+    float adaptiveKP = PID_KP;
+    float adaptiveKD = PID_KD;
 
-    if (abs(error) > 2000) {
-        adaptiveKP *= 1.3f;
+    // Bei großen Fehlern (Rand) deutlich aggressiver reagieren
+    if (abs(error) > 2500) {
+        adaptiveKP *= 2.0f;  // Doppelte Reaktion am äußeren Rand
+        adaptiveKD *= 0.5f;  // Weniger Dämpfung für schnellere Korrektur
+    } else if (abs(error) > 1500) {
+        adaptiveKP *= 1.5f;  // 50% mehr Reaktion
     }
 
-    float derivative = (error - lastError) / dt;
-    float correction = (adaptiveKP * error) + (adaptiveKD * derivative);
+    // Derivative mit Glättung gegen Zittern
+    static float smoothedDerivative = 0;
+    float rawDerivative = (error - lastError) / dt;
+    smoothedDerivative = 0.7f * smoothedDerivative + 0.3f * rawDerivative;
 
-    float maxCorr = smoothedSpeed * 0.8f;
+    float correction = (adaptiveKP * error) + (adaptiveKD * smoothedDerivative);
+
+    // ASYMMETRIE-KORREKTUR: Rechte Seite braucht mehr Korrektur
+    // error < 0 = Linie rechts (Sensoren 1-4) -> Korrektur verstärken
+    if (error < 0) {
+        correction *= 1.4f;  // 40% mehr Korrektur für rechte Seite
+    }
+
+    // Maximale Korrektur begrenzen
+    float maxCorr = smoothedSpeed * 1.5f;
     correction = constrain(correction, -maxCorr, maxCorr);
 
     lastError = error;
@@ -320,17 +336,13 @@ void updatePID() {
     float leftSpeed = smoothedSpeed - correction;
     float rightSpeed = smoothedSpeed + correction;
 
-    if (abs(error) > 1500) {
-        float brakeFactor = 0.4f;
-        if (error > 0) {
-            leftSpeed *= brakeFactor;
-        } else {
-            rightSpeed *= brakeFactor;
-        }
-    }
+    // WICHTIG: Mindestgeschwindigkeit damit Roboter immer vorwärts fährt
+    // und nicht blockiert oder auf der Stelle dreht
+    const float MIN_SPEED = smoothedSpeed * 0.25f;  // Mind. 25% der Normalgeschwindigkeit
 
-    leftSpeed = constrain(leftSpeed, 0, SPEED_MAX);
-    rightSpeed = constrain(rightSpeed, 0, SPEED_MAX);
+    // Begrenze auf gültige Werte, aber mit Mindestgeschwindigkeit
+    leftSpeed = constrain(leftSpeed, MIN_SPEED, SPEED_MAX);
+    rightSpeed = constrain(rightSpeed, MIN_SPEED, SPEED_MAX);
 
     setMotorSpeeds(leftSpeed, rightSpeed);
 }

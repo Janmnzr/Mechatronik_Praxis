@@ -17,7 +17,7 @@
 
 // ===== SERVO MOTOR =====
 #define SERVO_PIN       12
-#define SERVO_MIN_POS   10      // Minimale Position (Grad) - unten (etwas Abstand vom Anschlag)
+#define SERVO_MIN_POS   20      // Minimale Position (Grad) - unten (etwas Abstand vom Anschlag)
 #define SERVO_MAX_POS   170     // Maximale Position (Grad) - oben (etwas Abstand vom Anschlag)
 #define SERVO_HALF_POS  80      // Halbe Höhe (Grad)
 
@@ -83,9 +83,9 @@
 // PID-REGLER
 // =============================================================================
 
-#define PID_KP          0.15f   // Proportional (Reaktionsstärke)
-#define PID_KD          0.4f    // Differential (Dämpfung)
-#define PID_DEADZONE    150     // Fehler unter diesem Wert = ignorieren
+#define PID_KP          0.25f   // Proportional (Reaktionsstärke) - erhöht für bessere Rückführung
+#define PID_KD          0.15f   // Differential (Dämpfung) - reduziert gegen Zittern
+#define PID_DEADZONE    250     // Fehler unter diesem Wert = ignorieren - erhöht gegen Zittern
 
 // =============================================================================
 // SENSOR-SCHWELLWERTE
@@ -113,14 +113,14 @@
 //
 // AKTUELLE REIHENFOLGE:
 // ID 1: Rote Linie + Rote Box (gleiche Farbe!)
-// ID 2: Orangener Ball
-// ID 3: Blauer Ball
+// ID 2: Gelber Ball (1. Ball) -> Rote Box
+// ID 3: Blauer Ball (2. Ball) -> Grüne Box
 // ID 4: Grüne Box
 // =============================================================================
 
 #define HUSKY_ID_RED_LINE    1      // Rote Linie (Parcour-Ende) UND Rote Box!
-#define HUSKY_ID_ORANGE_BALL 2      // Orangener Ball (1. Ball)
-#define HUSKY_ID_BLUE_BALL   3      // Blauer Ball (2. Ball)
+#define HUSKY_ID_YELLOW_BALL 2      // Gelber Ball (1. Ball) -> Rote Box
+#define HUSKY_ID_BLUE_BALL   3      // Blauer Ball (2. Ball) -> Grüne Box
 #define HUSKY_ID_GREEN_BOX   4      // Grüne Box
 #define HUSKY_ID_RED_BOX     1      // Rote Box (gleiche ID wie rote Linie!)
 
@@ -143,9 +143,9 @@
 #define GREEN_PAIR_MAX_DIFF   80    // Max. Differenz zwischen zwei Sensoren eines Paares
 
 // --- TIMING ---
-#define GREEN_CONFIRM_MS    200     // Bestätigungszeit für Grün-Erkennung
+#define GREEN_CONFIRM_MS    220     // Bestätigungszeit für Grün-Erkennung
 #define SIGNAL_CONFIRM_MS   150     // Bestätigungszeit für geometrische Signale
-#define TURN_COOLDOWN_MS    1500    // Pause zwischen Abbiegungen
+#define TURN_COOLDOWN_MS    2500    // Pause zwischen Abbiegungen
 #define RED_LINE_CONFIRM_MS 140     // HuskyLens muss rote Linie 150ms sehen
 
 // =============================================================================

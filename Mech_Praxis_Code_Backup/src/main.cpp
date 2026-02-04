@@ -26,10 +26,10 @@
 // ===== HUSKYLENS IDs (lokal definiert) =====
 // WICHTIG: Rote Linie und Rote Box haben GLEICHE ID!
 #define HUSKY_ID_RED_LINE     1      // Rote Linie (Parcour-Ende)
-#define HUSKY_ID_ORANGE_BALL  2      // Orangener Ball (erster Ball)
-#define HUSKY_ID_BLUE_BALL    3      // Blauer Ball (zweiter Ball)
+#define HUSKY_ID_YELLOW_BALL  2      // Gelber Ball (erster Ball) -> Rote Box
+#define HUSKY_ID_BLUE_BALL    3      // Blauer Ball (zweiter Ball) -> Grüne Box
 #define HUSKY_ID_GREEN_BOX    4      // Grüne Box (für blauen Ball)
-#define HUSKY_ID_RED_BOX      1      // Rote Box (für orangenen Ball) - GLEICHE ID wie rote Linie!
+#define HUSKY_ID_RED_BOX      1      // Rote Box (für gelben Ball) - GLEICHE ID wie rote Linie!
 
 // ===== HAUPT-MODI =====
 enum Mode { 
@@ -286,15 +286,20 @@ void runLineFollower() {
         redLineStartTime = 0;
     }
 
-    // Display
-    if (millis() - lastLcdUpdate > 300) {
+    // Display - zeigt Position und Error für Debug
+    if (millis() - lastLcdUpdate > 150) {
         char l1[17], l2[17];
-        snprintf(l1, 17, "Speed: %d", getCurrentSpeed());
-        
+        int pos = readLinePosition();
+        int err = pos - LINE_CENTER;
+
+        // Zeile 1: Position (0-7000, Mitte=3500)
+        snprintf(l1, 17, "Pos:%d", pos);
+
+        // Zeile 2: Error (negativ=rechts, positiv=links)
         if (redLineStartTime > 0) {
-            snprintf(l2, 17, "ROT erkannt...");
+            snprintf(l2, 17, "ROT! E:%d", err);
         } else {
-            snprintf(l2, 17, "Linie OK");
+            snprintf(l2, 17, "Err:%d S:%d", err, getCurrentSpeed());
         }
         lcdPrint(l1, l2);
         lastLcdUpdate = millis();
@@ -363,7 +368,7 @@ void startBallSearchMode() {
 
 // =============================================================================
 // BALL SUCHEN - HuskyLens erkennt Ball, Roboter dreht bis zentriert
-// Ball 1: Orange suchen, Ball 2: Blau suchen
+// Ball 1: Gelb suchen -> Rote Box, Ball 2: Blau suchen -> Grüne Box
 // =============================================================================
 void runBallSearch() {
     if (millis() - modeStartTime > SEARCH_TIMEOUT_MS) {
@@ -373,37 +378,37 @@ void runBallSearch() {
         mode = MODE_STOPPED;
         return;
     }
-    
+
     // Gezielt den richtigen Ball suchen
     HuskyResult ball;
     const char* searchColor;
-    
+
     if (ballsCollected == 0) {
-        // Erster Ball: ORANGE suchen
-        ball = huskyFindOrangeBall();
-        searchColor = "ORANGE";
+        // Erster Ball: GELB suchen -> Rote Box
+        ball = huskyFindYellowBall();
+        searchColor = "GELB";
     } else {
-        // Zweiter Ball: BLAU suchen
+        // Zweiter Ball: BLAU suchen -> Grüne Box
         ball = huskyFindBlueBall();
         searchColor = "BLAU";
     }
-    
+
     if (ball.found) {
         int offset = huskyGetCenterOffset(ball);
-        
+
         char l1[17], l2[17];
         snprintf(l1, 17, "%s Ball!", searchColor);
         snprintf(l2, 17, "Offset:%d", offset);
         lcdPrint(l1, l2);
-        
+
         // Ball zentriert?
         if (abs(offset) <= HUSKY_TOLERANCE_X) {
             stopMotors();
             delay(200);
-            
+
             // Farbe von HuskyLens merken (wird später mit RGB validiert)
-            if (ball.id == HUSKY_ID_ORANGE_BALL) {
-                currentBallColor = COLOR_ORANGE;
+            if (ball.id == HUSKY_ID_YELLOW_BALL) {
+                currentBallColor = COLOR_YELLOW;
             } else if (ball.id == HUSKY_ID_BLUE_BALL) {
                 currentBallColor = COLOR_BLUE;
             } else {
@@ -516,24 +521,24 @@ void runBallValidate() {
     }
     
     // Mehrheitsentscheidung
-    int orangeCount = 0, blueCount = 0;
+    int yellowCount = 0, blueCount = 0;
     for (int i = 0; i < 3; i++) {
-        if (measurements[i] == COLOR_ORANGE) orangeCount++;
+        if (measurements[i] == COLOR_YELLOW) yellowCount++;
         if (measurements[i] == COLOR_BLUE) blueCount++;
     }
-    
-    if (orangeCount >= 2) {
-        validatedBallColor = COLOR_ORANGE;
+
+    if (yellowCount >= 2) {
+        validatedBallColor = COLOR_YELLOW;
     } else if (blueCount >= 2) {
         validatedBallColor = COLOR_BLUE;
     } else {
         validatedBallColor = measurements[0];  // Fallback: erste Messung
     }
-    
+
     // Vergleich mit HuskyLens
     char l1[17], l2[17];
     snprintf(l1, 17, "RGB: %s", getColorName(validatedBallColor));
-    
+
     if (validatedBallColor == currentBallColor) {
         snprintf(l2, 17, "Bestaetigt!");
     } else if (validatedBallColor != COLOR_UNKNOWN) {
@@ -544,15 +549,15 @@ void runBallValidate() {
         snprintf(l2, 17, "HuskyLens nutzen");
         // Falls RGB unsicher, HuskyLens-Ergebnis behalten
     }
-    
+
     lcdPrint(l1, l2);
     delay(1500);
-    
+
     // Ziel-Box basierend auf finaler Farbe setzen
-    // ORANGE Ball -> ROTE Box (ID 1)
+    // GELBER Ball -> ROTE Box (ID 1)
     // BLAUER Ball -> GRÜNE Box (ID 4)
-    if (currentBallColor == COLOR_ORANGE) {
-        targetBoxID = HUSKY_ID_RED_BOX;     // Rote Box
+    if (currentBallColor == COLOR_YELLOW) {
+        targetBoxID = HUSKY_ID_RED_BOX;     // Rote Box für gelben Ball
     } else {
         targetBoxID = HUSKY_ID_GREEN_BOX;   // Grüne Box für blauen Ball
     }
@@ -774,7 +779,7 @@ void runReturnToField() {
     
     // SCHRITT 2: 90° nach links drehen
     lcdPrint("Drehe links", "...");
-    executeSteps(STEPS_90_DEGREE, +STEPS_90_DEGREE, SPEED_TURN);
+    executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);
     delay(300);
     
     // SCHRITT 3: RÜCKWÄRTS ins Ballfeld fahren

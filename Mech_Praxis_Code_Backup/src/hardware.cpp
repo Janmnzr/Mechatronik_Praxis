@@ -149,7 +149,23 @@ void setServoPosition(int degrees) {
 }
 
 void setServoHalf() {
-    gripper.write(SERVO_HALF_POS);
+    // Langsam von aktueller Position zur halben Höhe fahren
+    int currentPos = gripper.read();
+    int targetPos = SERVO_HALF_POS;
+
+    if (currentPos < targetPos) {
+        // Hochfahren - langsam mit halber Geschwindigkeit
+        for (int pos = currentPos; pos <= targetPos; pos++) {
+            gripper.write(pos);
+            delay(15);  // 15ms pro Grad = langsame Bewegung
+        }
+    } else if (currentPos > targetPos) {
+        // Runterfahren
+        for (int pos = currentPos; pos >= targetPos; pos--) {
+            gripper.write(pos);
+            delay(15);
+        }
+    }
 }
 
 void setServoUp() {
@@ -645,19 +661,19 @@ bool huskySeesRedLine() {
     return false;
 }
 
-// Irgendeinen Ball finden (grün oder blau)
+// Irgendeinen Ball finden (gelb oder blau)
 HuskyResult huskyFindBall() {
-    // Erst orangenen Ball suchen (1. Ball)
-    HuskyResult result = huskyFindByID(HUSKY_ID_ORANGE_BALL);
+    // Erst gelben Ball suchen (1. Ball)
+    HuskyResult result = huskyFindByID(HUSKY_ID_YELLOW_BALL);
     if (result.found) return result;
-    
+
     // Dann blauen Ball (2. Ball)
     result = huskyFindByID(HUSKY_ID_BLUE_BALL);
     return result;
 }
 
-HuskyResult huskyFindOrangeBall() {
-    return huskyFindByID(HUSKY_ID_ORANGE_BALL);
+HuskyResult huskyFindYellowBall() {
+    return huskyFindByID(HUSKY_ID_YELLOW_BALL);
 }
 
 HuskyResult huskyFindBlueBall() {
