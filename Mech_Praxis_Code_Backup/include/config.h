@@ -18,7 +18,7 @@
 // ===== SERVO MOTOR =====
 #define SERVO_PIN       12
 #define SERVO_MIN_POS   20      // Minimale Position (Grad) - unten (etwas Abstand vom Anschlag)
-#define SERVO_MAX_POS   170     // Maximale Position (Grad) - oben (etwas Abstand vom Anschlag)
+#define SERVO_MAX_POS   160     // Maximale Position (Grad) - oben (etwas Abstand vom Anschlag)
 #define SERVO_HALF_POS  80      // Halbe Höhe (Grad)
 
 // ===== QTR-8RC SENSOR PINS =====
@@ -94,9 +94,6 @@
 #define LINE_THRESHOLD  750     // Ab diesem Wert = "Schwarz" erkannt
 #define LINE_CENTER     3500    // Mitte der Linie (0-7000 Bereich)
 
-// --- Ballsuche Laser-Sprung ---
-#define LASER_BALL_DETECT_JUMP  100     // Sprung in mm der Ball signalisiert
-
 // =============================================================================
 // HUSKYLENS OBJEKT-IDs (Color Recognition Modus!)
 // =============================================================================
@@ -122,7 +119,7 @@
 // Bildmitte für Ausrichtung (HuskyLens hat 320x240 Auflösung)
 #define HUSKY_CENTER_X      160
 #define HUSKY_CENTER_Y      120
-#define HUSKY_TOLERANCE_X   25      // Toleranz für "zentriert" in Pixeln
+#define HUSKY_TOLERANCE_X   20      // Toleranz für "zentriert" in Pixeln
 #define HUSKY_MIN_SIZE      15      // Minimale Objektgröße für Erkennung
 
 // =============================================================================
@@ -150,7 +147,7 @@
 // --- SPIELFELD DIMENSIONEN (in cm) ---
 #define FIELD_LENGTH_CM     90      // Länge des Ballsuchbereichs
 #define FIELD_WIDTH_CM      120     // Breite des Ballsuchbereichs
-#define SEARCH_ENTRY_DISTANCE 40    // Einfahrt ins Feld in cm (nach roter Linie)
+#define SEARCH_ENTRY_DISTANCE 45    // Einfahrt ins Feld in cm (nach roter Linie)
 
 // --- BOX DIMENSIONEN (in cm) ---
 #define BOX_WALL_SIDE_CM    30      // Seiten an der Wand
@@ -159,8 +156,6 @@
 // --- VL53L0X LASER SENSOR ---
 #define LASER_TIMING_BUDGET_MS  50      // Messzeit (höher = genauer)
 #define LASER_MAX_RANGE_MM      1200    // Maximale Reichweite
-#define LASER_BALL_MIN_DIST     30      // Minimale Ball-Distanz in mm
-#define LASER_BALL_MAX_DIST     800     // Maximale Ball-Distanz in mm
 #define LASER_TARGET_DIST       70      // Zieldistanz zum Ball in mm (Greifer-Position)
 #define LASER_APPROACH_TOLERANCE 10     // Toleranz beim Anfahren (+/- mm)
 
@@ -184,6 +179,12 @@
 #define STEPS_90_DEGREE     680     // 90°-Drehung
 #define STEPS_BEFORE_TURN   320     // 5cm vorfahren vor Drehung
 #define STEPS_BACKWARD      128     // 2cm zurück bei Linienverlust
+
+// --- GERADEAUS-KORREKTUR ---
+// Wenn der Roboter beim Geradeausfahren nach LINKS zieht: Wert erhöhen (z.B. 1.02)
+// Wenn der Roboter beim Geradeausfahren nach RECHTS zieht: Wert verringern (z.B. 0.98)
+#define STRAIGHT_CORRECTION_L   1.0f    // Multiplikator für linken Motor
+#define STRAIGHT_CORRECTION_R   1.0f    // Multiplikator für rechten Motor
 
 // =============================================================================
 // DEBUG (ausschalten für Performance!)

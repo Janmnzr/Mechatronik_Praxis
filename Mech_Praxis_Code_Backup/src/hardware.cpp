@@ -105,8 +105,18 @@ void executeSteps(int leftSteps, int rightSteps, int speed) {
     int leftDir = (leftSteps >= 0) ? 1 : -1;
     int rightDir = (rightSteps >= 0) ? 1 : -1;
 
-    motorL.setSpeed(speed * leftDir);
-    motorR.setSpeed(speed * rightDir);
+    // Geradeaus-Korrektur anwenden wenn beide Seiten gleich viele Steps haben
+    float speedL = speed * leftDir;
+    float speedR = speed * rightDir;
+
+    if (leftSteps == rightSteps) {
+        // Korrektur für Geradeausfahrt anwenden
+        speedL *= STRAIGHT_CORRECTION_L;
+        speedR *= STRAIGHT_CORRECTION_R;
+    }
+
+    motorL.setSpeed(speedL);
+    motorR.setSpeed(speedR);
 
     long targetL = abs(leftSteps);
     long targetR = abs(rightSteps);

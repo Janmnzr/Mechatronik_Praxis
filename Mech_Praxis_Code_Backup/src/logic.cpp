@@ -3,7 +3,7 @@
 #include "hardware.h"
 
 // =============================================================================
-// LOGIC.CPP - Erweiterte Steuerungslogik mit Ballsuche
+// LOGIC.CPP - Erweiterte Steuerungslogik
 // =============================================================================
 
 // ===== PRIVATE VARIABLEN =====
@@ -34,15 +34,6 @@ static unsigned long lastPidTime = 0;
 // --- Smart Speed ---
 static int targetSpeed = SPEED_NORMAL;
 static float smoothedSpeed = SPEED_NORMAL;
-
-// --- Ballsuche ---
-static BallSearchState ballSearchState = BALL_SEARCH_IDLE;
-static uint16_t lastLaserDist = 0;
-static uint16_t ballDistance = 0;
-static uint16_t prevLaserDist = 0;
-static BallColor detectedBallColor = COLOR_UNKNOWN;
-static int scanSampleCount = 0;
-static unsigned long lastScanTime = 0;
 
 // =============================================================================
 // INITIALISIERUNG
@@ -302,109 +293,6 @@ void updateSpeed() {
 }
 
 // =============================================================================
-// BALLSUCHE
-// =============================================================================
-
-void initBallSearch() {
-    ballSearchState = BALL_SEARCH_IDLE;
-    lastLaserDist = 0;
-    prevLaserDist = 0;
-    ballDistance = 0;
-    detectedBallColor = COLOR_UNKNOWN;
-    scanSampleCount = 0;
-    lastScanTime = millis();
-}
-
-void resetBallSearch() {
-    initBallSearch();
-}
-
-void updateBallSearch() {
-    unsigned long now = millis();
-    
-    // Laser-Distanz aktualisieren
-    if (isLaserReady()) {
-        prevLaserDist = lastLaserDist;
-        lastLaserDist = readLaserDistance();
-    }
-    
-    switch (ballSearchState) {
-        case BALL_SEARCH_IDLE:
-            // Warten auf Start
-            break;
-            
-        case BALL_SEARCH_SCANNING:
-            // Prüfe auf Sprung im Laser-Wert (Ball erkannt)
-            if (prevLaserDist > 0 && lastLaserDist > 0) {
-                int distJump = (int)prevLaserDist - (int)lastLaserDist;
-                
-                // Positiver Sprung = plötzlich näher = Ball erkannt
-                if (distJump > LASER_BALL_DETECT_JUMP &&
-                    lastLaserDist >= LASER_BALL_MIN_DIST &&
-                    lastLaserDist <= LASER_BALL_MAX_DIST) {
-                    
-                    ballDistance = lastLaserDist;
-                    ballSearchState = BALL_SEARCH_FOUND;
-                    stopMotors();
-                }
-            }
-            break;
-            
-        case BALL_SEARCH_FOUND:
-            // Ball wurde gefunden, warte auf Annäherungsbefehl
-            break;
-            
-        case BALL_SEARCH_APPROACHING:
-            // Fahre auf Ball zu bis Zieldistanz erreicht
-            if (lastLaserDist > 0) {
-                if (lastLaserDist <= LASER_TARGET_DIST + LASER_APPROACH_TOLERANCE) {
-                    stopMotors();
-                    ballSearchState = BALL_SEARCH_ARRIVED;
-                }
-            }
-            break;
-            
-        case BALL_SEARCH_ARRIVED:
-            // Bei Ball angekommen, warte auf Farbmessung
-            break;
-            
-        case BALL_SEARCH_COLOR_READ:
-            // Farbe wurde gelesen
-            break;
-            
-        case BALL_SEARCH_FAILED:
-            // Suche fehlgeschlagen
-            break;
-    }
-}
-
-bool isBallDetected() {
-    if (prevLaserDist == 0 || lastLaserDist == 0) return false;
-    
-    int distJump = (int)prevLaserDist - (int)lastLaserDist;
-    
-    return (distJump > LASER_BALL_DETECT_JUMP &&
-            lastLaserDist >= LASER_BALL_MIN_DIST &&
-            lastLaserDist <= LASER_BALL_MAX_DIST);
-}
-
-BallSearchState getBallSearchState() {
-    return ballSearchState;
-}
-
-uint16_t getLastLaserDistance() {
-    return lastLaserDist;
-}
-
-uint16_t getBallDistance() {
-    return ballDistance;
-}
-
-BallColor getDetectedBallColor() {
-    return detectedBallColor;
-}
-
-// =============================================================================
 // GETTER
 // =============================================================================
 
@@ -530,18 +418,5 @@ const char* getReasonName(SignalReason r) {
         case REASON_90_CURVE:  return "90Grad";
         case REASON_RED_LINE:  return "ROT";
         default:               return "?";
-    }
-}
-
-const char* getBallSearchStateName(BallSearchState s) {
-    switch (s) {
-        case BALL_SEARCH_IDLE:        return "IDLE";
-        case BALL_SEARCH_SCANNING:    return "SCAN";
-        case BALL_SEARCH_FOUND:       return "FOUND";
-        case BALL_SEARCH_APPROACHING: return "APPROACH";
-        case BALL_SEARCH_ARRIVED:     return "ARRIVED";
-        case BALL_SEARCH_COLOR_READ:  return "COLOR";
-        case BALL_SEARCH_FAILED:      return "FAILED";
-        default:                      return "?";
     }
 }

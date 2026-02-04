@@ -5,13 +5,12 @@
 #include "hardware.h"
 
 // =============================================================================
-// LOGIC.H - Vereinfachte Steuerungslogik mit Ballsuche
+// LOGIC.H - Vereinfachte Steuerungslogik
 // =============================================================================
 // Enthält:
 // - Adaptiver PID-Regler
 // - Zeitbasierte Signal-Erkennung (Kurve/Kreuzung)
 // - Rote Linie Erkennung (Parkour-Ende)
-// - Ballsuche Logik
 // =============================================================================
 
 // ===== SIGNAL-TYPEN =====
@@ -28,17 +27,6 @@ enum SignalReason {
     REASON_GREEN,        // Grün erkannt
     REASON_90_CURVE,     // 90°-Kurve (schwarz) erkannt
     REASON_RED_LINE      // Rote Linie erkannt
-};
-
-// ===== BALLSUCHE STATUS =====
-enum BallSearchState {
-    BALL_SEARCH_IDLE = 0,       // Noch nicht gestartet
-    BALL_SEARCH_SCANNING,       // Dreht sich und scannt
-    BALL_SEARCH_FOUND,          // Ball gefunden
-    BALL_SEARCH_APPROACHING,    // Fährt auf Ball zu
-    BALL_SEARCH_ARRIVED,        // Bei Ball angekommen
-    BALL_SEARCH_COLOR_READ,     // Farbe wurde gelesen
-    BALL_SEARCH_FAILED          // Kein Ball gefunden
 };
 
 // ===== INITIALISIERUNG =====
@@ -66,22 +54,11 @@ SignalType getCurrentSignal();      // Aktuell erkanntes Signal
 bool isRedLineConfirmed();          // Rote Linie bestätigt (nach Mindestzeit)
 void clearRedLineDetection();       // Reset rote Linie Erkennung
 
-// ===== BALLSUCHE =====
-void initBallSearch();              // Ballsuche initialisieren
-void updateBallSearch();            // Ballsuche Update (jeden Loop aufrufen)
-BallSearchState getBallSearchState(); // Aktueller Status
-uint16_t getLastLaserDistance();    // Letzte gemessene Distanz
-uint16_t getBallDistance();         // Distanz zum erkannten Ball
-BallColor getDetectedBallColor();   // Erkannte Ballfarbe
-void resetBallSearch();             // Ballsuche zurücksetzen
-bool isBallDetected();              // Ball im aktuellen Scan erkannt?
-
 // ===== AKTIONEN =====
 void clearConfirmedSignal();        // Signal als "behandelt" markieren
 
 // ===== DEBUG =====
 const char* getSignalName(SignalType s);
 const char* getReasonName(SignalReason r);
-const char* getBallSearchStateName(BallSearchState s);
 
 #endif // LOGIC_H
