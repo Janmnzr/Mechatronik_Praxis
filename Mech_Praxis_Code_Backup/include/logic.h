@@ -62,8 +62,7 @@ int getLeftSideCount();             // Anzahl aktiver Sensoren links (0-4)
 int getRightSideCount();            // Anzahl aktiver Sensoren rechts (0-4)
 SignalType getCurrentSignal();      // Aktuell erkanntes Signal
 
-// ===== ROTE LINIE ERKENNUNG =====
-bool isRedLineDetected();           // Prüft ob rote Querlinie erkannt wurde
+// ===== ROTE LINIE ERKENNUNG (nur HuskyLens) =====
 bool isRedLineConfirmed();          // Rote Linie bestätigt (nach Mindestzeit)
 void clearRedLineDetection();       // Reset rote Linie Erkennung
 
