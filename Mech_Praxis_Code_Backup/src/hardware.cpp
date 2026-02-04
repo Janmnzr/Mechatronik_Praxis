@@ -57,6 +57,7 @@ void initMotors() {
     pinMode(ENABLE_PIN, OUTPUT);
     digitalWrite(ENABLE_PIN, HIGH);
     
+    // Beide Motoren gleiche Inversion (Hardware-Verdrahtung kompensiert)
     motorL.setPinsInverted(true, false, false);
     motorR.setPinsInverted(true, false, false);
     

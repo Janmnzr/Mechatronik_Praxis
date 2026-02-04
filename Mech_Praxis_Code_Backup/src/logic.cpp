@@ -104,56 +104,7 @@ void updateSensors() {
 // ROTE LINIE ERKENNUNG
 // =============================================================================
 
-bool isRedLineDetected() {
-    extern uint16_t sensorValues[8];
-    
-    int sensorsInRange = 0;
-    int sensorsBlack = 0;
-    int sensorsWhite = 0;
-    long sum = 0;
-    int minVal = 1000;
-    int maxVal = 0;
-    
-    for (int i = 0; i < NUM_SENSORS; i++) {
-        int val = sensorValues[i];
-        sum += val;
-        
-        if (val < minVal) minVal = val;
-        if (val > maxVal) maxVal = val;
-        
-        // Rot: Werte zwischen 70-350
-        if (val >= RED_LINE_MIN && val <= RED_LINE_MAX) {
-            sensorsInRange++;
-        }
-        // Schwarz: Werte über 750
-        if (val > LINE_THRESHOLD) {
-            sensorsBlack++;
-        }
-        // Weiß: Werte unter 50
-        if (val < 50) {
-            sensorsWhite++;
-        }
-    }
-    
-    // Berechne Durchschnitt und Varianz
-    int avg = sum / NUM_SENSORS;
-    int range = maxVal - minVal;
-    
-    // ROTE LINIE Kriterien:
-    // 1. Mindestens 5 Sensoren im Rot-Bereich
-    // 2. Kein Sensor auf Schwarz (max 1)
-    // 3. Nicht alles Weiß
-    // 4. Geringe Varianz (alle Sensoren ähnlich) - Range < 200
-    // 5. Durchschnitt im mittleren Bereich (100-300)
-    
-    bool enoughInRange = (sensorsInRange >= RED_LINE_MIN_SENSORS);
-    bool noBlack = (sensorsBlack <= 1);
-    bool notAllWhite = (sensorsWhite < 6);
-    bool lowVariance = (range < 250);
-    bool avgInRange = (avg >= 80 && avg <= 350);
-    
-    return (enoughInRange && noBlack && notAllWhite && lowVariance && avgInRange);
-}
+
 
 bool isRedLineConfirmed() {
     return redLineConfirmed;
@@ -184,26 +135,8 @@ void updateSignalDetection() {
     unsigned long now = millis();
     extern uint16_t sensorValues[8];
 
-    // =========================================================================
-    // PHASE 0: ROTE LINIE ERKENNUNG (höchste Priorität!)
-    // =========================================================================
-    if (isRedLineDetected()) {
-        if (redLineStartTime == 0) {
-            redLineStartTime = now;
-        } else if (now - redLineStartTime >= RED_LINE_CONFIRM_MS) {
-            redLineConfirmed = true;
-            // Alle anderen Signale zurücksetzen
-            curveStartTime = 0;
-            greenStartTime = 0;
-            return;
-        }
-    }
-    // WICHTIG: Timer NICHT zurücksetzen wenn kurz nicht erkannt!
-    // Nur zurücksetzen wenn lange nicht erkannt (>500ms)
-    else if (redLineStartTime > 0 && (now - redLineStartTime) > 500) {
-        redLineStartTime = 0;
-    }
-
+  
+    
     // Wenn rote Linie bestätigt, keine weiteren Signale prüfen
     if (redLineConfirmed) return;
 
@@ -310,8 +243,8 @@ void updatePID() {
     // Basis-Korrektur berechnen
     float correction = (PID_KP * error) + (PID_KD * smoothedDerivative);
 
-    // EINHEITLICHE Verstärkung basierend auf Fehlergröße
-    // (Keine doppelte Multiplikation mehr!)
+    // SYMMETRISCHE Verstärkung basierend auf Fehlergröße
+    // Gleiche Behandlung für links und rechts
     float boostFactor = 1.0f;
     if (abs(error) > 2500) {
         boostFactor = 3.0f;      // Sehr großer Fehler (am Rand)
@@ -323,17 +256,13 @@ void updatePID() {
         boostFactor = 1.5f;
     }
 
-    // Zusätzlicher Boost nur für rechte Seite (error < 0)
-    if (error < 0) {
-        boostFactor *= 1.3f;  // 30% extra für rechte Seite
-    }
-
     correction *= boostFactor;
 
-    // Korrektur glätten um plötzliche Sprünge zu vermeiden
-    static float smoothedCorrection = 0;
-    smoothedCorrection = 0.6f * smoothedCorrection + 0.4f * correction;
-    correction = smoothedCorrection;
+    // Korrektur-Glättung DEAKTIVIERT für symmetrisches Verhalten
+    // (Alte Werte könnten asymmetrische Reaktion verursachen)
+    // static float smoothedCorrection = 0;
+    // smoothedCorrection = 0.6f * smoothedCorrection + 0.4f * correction;
+    // correction = smoothedCorrection;
 
     // Maximale Korrektur begrenzen
     float maxCorr = smoothedSpeed * 2.0f;

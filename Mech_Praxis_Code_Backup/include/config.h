@@ -69,10 +69,10 @@
 // =============================================================================
 
 #define SPEED_MAX       800     // Maximale Geschwindigkeit
-#define SPEED_NORMAL    450     // Normale Linienfolge-Geschwindigkeit
-#define SPEED_SLOW      350     // Reduzierte Geschwindigkeit bei Grün-Erkennung (66%)
+#define SPEED_NORMAL    650     // Normale Linienfolge-Geschwindigkeit
+#define SPEED_SLOW      450     // Reduzierte Geschwindigkeit bei Grün-Erkennung (66%)
 #define SPEED_TURN      350     // Geschwindigkeit für 90°-Drehungen
-#define SPEED_SEARCH    200     // Geschwindigkeit für Ballsuche-Drehung
+#define SPEED_SEARCH    220     // Geschwindigkeit für Ballsuche-Drehung
 #define SPEED_APPROACH  250     // Geschwindigkeit beim Anfahren des Balls
 #define SPEED_SIDEWAYS  200     // Geschwindigkeit für seitliches Positionieren
 
@@ -83,7 +83,7 @@
 // PID-REGLER
 // =============================================================================
 
-#define PID_KP          0.25f   // Proportional (Reaktionsstärke) - erhöht für bessere Rückführung
+#define PID_KP          0.35f   // Proportional (Reaktionsstärke) - erhöht für bessere Rückführung
 #define PID_KD          0.15f   // Differential (Dämpfung) - reduziert gegen Zittern
 #define PID_DEADZONE    250     // Fehler unter diesem Wert = ignorieren - erhöht gegen Zittern
 
@@ -146,7 +146,7 @@
 #define GREEN_CONFIRM_MS    220     // Bestätigungszeit für Grün-Erkennung
 #define SIGNAL_CONFIRM_MS   150     // Bestätigungszeit für geometrische Signale
 #define TURN_COOLDOWN_MS    2500    // Pause zwischen Abbiegungen
-#define RED_LINE_CONFIRM_MS 140     // HuskyLens muss rote Linie 150ms sehen
+#define RED_LINE_CONFIRM_MS 150     // HuskyLens muss rote Linie 150ms sehen
 
 // =============================================================================
 // SPIELFELD & BALLSUCHE KONFIGURATION
