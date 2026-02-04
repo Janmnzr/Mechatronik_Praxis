@@ -17,7 +17,7 @@
 
 // ===== SERVO MOTOR =====
 #define SERVO_PIN       12
-#define SERVO_MIN_POS   20      // Minimale Position (Grad) - unten (etwas Abstand vom Anschlag)
+#define SERVO_MIN_POS   25      // Minimale Position (Grad) - unten (etwas Abstand vom Anschlag)
 #define SERVO_MAX_POS   160     // Maximale Position (Grad) - oben (etwas Abstand vom Anschlag)
 #define SERVO_HALF_POS  80      // Halbe Höhe (Grad)
 
