@@ -134,27 +134,41 @@ void executeSteps(int leftSteps, int rightSteps, int speed) {
 }
 
 // =============================================================================
-// SERVO FUNKTIONEN
+// SERVO FUNKTIONEN (mit Anti-Zitter Schutz)
 // =============================================================================
+
+// Letzte Servo-Position merken um redundante Schreibvorgänge zu vermeiden
+static int lastServoPosition = -1;
 
 void initServo() {
     gripper.attach(SERVO_PIN);
     gripper.write(SERVO_MIN_POS);
+    lastServoPosition = SERVO_MIN_POS;
     delay(500);
 }
 
 void setServoPosition(int degrees) {
     degrees = constrain(degrees, SERVO_MIN_POS, SERVO_MAX_POS);
-    gripper.write(degrees);
+    // Nur schreiben wenn Position sich ändert (verhindert Zittern!)
+    if (degrees != lastServoPosition) {
+        gripper.write(degrees);
+        lastServoPosition = degrees;
+    }
 }
 
 void setServoHalf() {
-    // Langsam von aktueller Position zur halben Höhe fahren
-    int currentPos = gripper.read();
     int targetPos = SERVO_HALF_POS;
 
+    // Wenn bereits auf Zielposition, nichts tun
+    if (lastServoPosition == targetPos) {
+        return;
+    }
+
+    // Langsam von aktueller Position zur halben Höhe fahren
+    int currentPos = gripper.read();
+
     if (currentPos < targetPos) {
-        // Hochfahren - langsam mit halber Geschwindigkeit
+        // Hochfahren - langsam
         for (int pos = currentPos; pos <= targetPos; pos++) {
             gripper.write(pos);
             delay(15);  // 15ms pro Grad = langsame Bewegung
@@ -166,14 +180,23 @@ void setServoHalf() {
             delay(15);
         }
     }
+    lastServoPosition = targetPos;
 }
 
 void setServoUp() {
-    gripper.write(SERVO_MAX_POS);
+    // Nur schreiben wenn Position sich ändert
+    if (lastServoPosition != SERVO_MAX_POS) {
+        gripper.write(SERVO_MAX_POS);
+        lastServoPosition = SERVO_MAX_POS;
+    }
 }
 
 void setServoDown() {
-    gripper.write(SERVO_MIN_POS);
+    // Nur schreiben wenn Position sich ändert
+    if (lastServoPosition != SERVO_MIN_POS) {
+        gripper.write(SERVO_MIN_POS);
+        lastServoPosition = SERVO_MIN_POS;
+    }
 }
 
 // =============================================================================
@@ -688,18 +711,24 @@ HuskyResult huskyFindRedBox() {
     // WICHTIG: Rote Box hat gleiche ID wie rote Linie!
     // Unterscheidung: Box ist quadratischer, Linie ist sehr breit
     HuskyResult result = huskyFindByID(HUSKY_ID_RED_BOX);
-    
+
     // Prüfe ob es eine Box ist (nicht zu breit im Verhältnis zur Höhe)
     // Linie: width >> height (z.B. 200x30)
     // Box: width ähnlich height (z.B. 80x60)
     if (result.found) {
         float ratio = (float)result.width / (float)result.height;
-        // Wenn Verhältnis > 3:1, ist es wahrscheinlich eine Linie, keine Box
-        if (ratio > 3.0) {
+        // Wenn Verhältnis > 4:1, ist es wahrscheinlich eine Linie, keine Box
+        // (Erhöht von 3.0 auf 4.0 für mehr Toleranz bei schrägen Winkeln)
+        if (ratio > 4.0f) {
             result.found = false;  // Ignoriere Linien-ähnliche Objekte
         }
+        // Zusätzlich: Box muss eine Mindestgröße haben
+        // (Linie am Boden ist weit weg und klein, Box in der Nähe ist größer)
+        if (result.found && result.height < 30) {
+            result.found = false;  // Zu klein, wahrscheinlich Linie in Entfernung
+        }
     }
-    
+
     return result;
 }
 

@@ -462,14 +462,18 @@ void runBallApproach() {
     HuskyResult ball = huskyFindBall();
     if (ball.found) {
         int offset = huskyGetCenterOffset(ball);
+
+        // RECHTS-KORREKTUR: Greifer steht zu weit links, also nach rechts verschieben
+        // Positiver Offset = Ball erscheint weiter rechts = Roboter fährt nach rechts
+        offset += 10;  // 10 Pixel nach rechts verschieben (anpassen falls nötig)
+
         // offset > 0 = Ball rechts -> rechts drehen -> linker Motor schneller
         // offset < 0 = Ball links -> links drehen -> rechter Motor schneller
-        float correction = offset * 0.3;  // Reduzierter Faktor
-        // INVERTIERT: + auf links, - auf rechts
+        float correction = offset * 0.2f;  // Reduziert von 0.3 auf 0.2
         setMotorSpeeds(SPEED_APPROACH + correction, SPEED_APPROACH - correction);
     } else {
-        // Ball nicht mehr sichtbar -> geradeaus weiter
-        setMotorSpeeds(SPEED_APPROACH, SPEED_APPROACH);
+        // Ball nicht mehr sichtbar -> leicht nach rechts tendieren
+        setMotorSpeeds(SPEED_APPROACH + 10, SPEED_APPROACH - 10);
     }
     
     // Zieldistanz erreicht?
@@ -611,15 +615,17 @@ void runBoxSearch() {
     
     if (box.found) {
         int offset = huskyGetCenterOffset(box);
-        
+
         char l1[17], l2[17];
-        snprintf(l1, 17, "Box %s!", boxName);
-        snprintf(l2, 17, "Offset:%d", offset);
+        // Zeige Box-Details: Offset und Größe (W x H)
+        snprintf(l1, 17, "%s O:%d", boxName, offset);
+        snprintf(l2, 17, "W:%d H:%d", box.width, box.height);
         lcdPrint(l1, l2);
-        
+
         if (abs(offset) <= HUSKY_TOLERANCE_X) {
             stopMotors();
-            delay(200);
+            lcdPrint("Box zentriert!", "-> Anfahren");
+            delay(500);
             mode = MODE_BOX_APPROACH;
             modeStartTime = millis();
         } else {

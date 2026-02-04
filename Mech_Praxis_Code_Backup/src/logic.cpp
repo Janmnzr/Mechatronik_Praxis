@@ -307,11 +307,12 @@ void updatePID() {
     float adaptiveKD = PID_KD;
 
     // Bei großen Fehlern (Rand) deutlich aggressiver reagieren
-    if (abs(error) > 2500) {
-        adaptiveKP *= 2.0f;  // Doppelte Reaktion am äußeren Rand
-        adaptiveKD *= 0.5f;  // Weniger Dämpfung für schnellere Korrektur
-    } else if (abs(error) > 1500) {
-        adaptiveKP *= 1.5f;  // 50% mehr Reaktion
+    // Schwellen gesenkt für frühere Reaktion
+    if (abs(error) > 2000) {
+        adaptiveKP *= 2.5f;  // 2.5x Reaktion am äußeren Rand
+        adaptiveKD *= 0.3f;  // Weniger Dämpfung für schnellere Korrektur
+    } else if (abs(error) > 1000) {
+        adaptiveKP *= 1.8f;  // 80% mehr Reaktion
     }
 
     // Derivative mit Glättung gegen Zittern
@@ -321,33 +322,35 @@ void updatePID() {
 
     float correction = (adaptiveKP * error) + (adaptiveKD * smoothedDerivative);
 
-    // ASYMMETRIE-KORREKTUR: Rechte Seite braucht VIEL mehr Korrektur
-    // error < 0 = Linie rechts (Sensoren 1-4) -> Korrektur verstärken
+    // ASYMMETRIE-KORREKTUR: Rechte Seite braucht mehr Korrektur
+    // error < 0 = Linie rechts (Sensoren 1-4) -> Verstärken
     if (error < 0) {
-        // Je größer der Fehler, desto mehr Verstärkung
-        if (abs(error) > 2500) {
-            correction *= 2.0f;  // Doppelte Korrektur bei sehr großem Fehler
-        } else if (abs(error) > 1500) {
-            correction *= 1.7f;  // 70% mehr bei großem Fehler
+        if (abs(error) > 2000) {
+            correction *= 2.5f;  // 2.5x bei sehr großem Fehler
+        } else if (abs(error) > 1000) {
+            correction *= 2.0f;  // Doppelt bei großem Fehler
         } else {
-            correction *= 1.4f;  // 40% mehr bei normalem Fehler
+            correction *= 1.5f;  // 50% mehr bei normalem Fehler
         }
     }
 
-    // Maximale Korrektur NICHT zu stark begrenzen
-    float maxCorr = smoothedSpeed * 2.5f;
+    // Maximale Korrektur begrenzen
+    float maxCorr = smoothedSpeed * 3.0f;
     correction = constrain(correction, -maxCorr, maxCorr);
 
     lastError = error;
 
-    float leftSpeed = smoothedSpeed - correction;
-    float rightSpeed = smoothedSpeed + correction;
+    // GETAUSCHT: Links und Rechts vertauscht!
+    float leftSpeed = smoothedSpeed + correction;
+    float rightSpeed = smoothedSpeed - correction;
 
-    // Mindestgeschwindigkeit - niedriger für stärkere Kurven
-    // Bei großem Fehler darf ein Rad fast stoppen
-    float minSpeedFactor = 0.15f;  // 15% Mindestgeschwindigkeit
-    if (abs(error) > 2500) {
-        minSpeedFactor = 0.05f;    // Bei sehr großem Fehler nur 5%
+    // Mindestgeschwindigkeit - beide Räder müssen IMMER drehen!
+    // Sonst blockiert der Roboter bei großen Fehlern
+    float minSpeedFactor = 0.25f;  // 25% Mindestgeschwindigkeit normal
+    if (abs(error) > 2000) {
+        minSpeedFactor = 0.15f;    // Bei sehr großem Fehler 15% (nicht 0!)
+    } else if (abs(error) > 1500) {
+        minSpeedFactor = 0.20f;    // Bei großem Fehler 20%
     }
     const float MIN_SPEED = smoothedSpeed * minSpeedFactor;
 
