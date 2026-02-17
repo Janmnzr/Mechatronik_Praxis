@@ -42,7 +42,7 @@
 #define MUX_ADDRESS          0x70    // Standard I2C Adresse TCA9548A
 #define MUX_CHANNEL_DISPLAY  1       // SD1/SC1 - LCD Display (0x27)
 #define MUX_CHANNEL_HUSKYLENS 2      // SD2/SC2 - HuskyLens Kamera (0x32)
-#define MUX_CHANNEL_LASER    0       // SD3/SC3 - VL53L0X Laser vorne (0x29)
+#define MUX_CHANNEL_LASER    0       // SD0/SC0 - VL53L0X Laser vorne (0x29)
 #define MUX_CHANNEL_RGB      4       // SD4/SC4 - TCS34725 RGB vorne (0x29)
 #define MUX_CHANNEL_LASER2   5       // SD5/SC5 - VL53L0X Laser seitlich (0x29)
 #define MUX_CHANNEL_RGB2     6       // SD6/SC6 - TCS34725 RGB seitlich (0x29)
@@ -68,24 +68,26 @@
 // Bei 1/8 Microstepping: 1600 steps/s = 1 Umdrehung/s ≈ 25cm/s
 // =============================================================================
 
-#define SPEED_MAX       800     // Maximale Geschwindigkeit
-#define SPEED_NORMAL    650     // Normale Linienfolge-Geschwindigkeit
-#define SPEED_SLOW      450     // Reduzierte Geschwindigkeit bei Grün-Erkennung (66%)
-#define SPEED_TURN      350     // Geschwindigkeit für 90°-Drehungen
-#define SPEED_SEARCH    220     // Geschwindigkeit für Ballsuche-Drehung
-#define SPEED_APPROACH  250     // Geschwindigkeit beim Anfahren des Balls
-#define SPEED_SIDEWAYS  200     // Geschwindigkeit für seitliches Positionieren
+#define SPEED_MAX       874     // Maximale Geschwindigkeit
+#define SPEED_NORMAL    710     // Normale Linienfolge-Geschwindigkeit
+#define SPEED_SLOW      491     // Reduzierte Geschwindigkeit bei Grün-Erkennung
+#define SPEED_TURN      382     // Geschwindigkeit für 90°-Drehungen
+#define SPEED_SEARCH    360     // Geschwindigkeit für Ballsuche-Drehung (1.5x)
+#define SPEED_APPROACH_BALL  410     // Geschwindigkeit beim Anfahren des Balls
+#define SPEED_APPROACH_BOX   820     // Geschwindigkeit beim Anfahren der Box (2x)
+#define SPEED_SIDEWAYS  327     // Geschwindigkeit für seitliches Positionieren (1.5x)
 
 // ===== BESCHLEUNIGUNG =====
-#define ACCELERATION    800     // Steps/s² (sanfter Start)
+#define ACCELERATION    874     // Steps/s²
 
 // =============================================================================
 // PID-REGLER
 // =============================================================================
 
-#define PID_KP          0.35f   // Proportional (Reaktionsstärke) - erhöht für bessere Rückführung
-#define PID_KD          0.15f   // Differential (Dämpfung) - reduziert gegen Zittern
-#define PID_DEADZONE    250     // Fehler unter diesem Wert = ignorieren - erhöht gegen Zittern
+#define PID_KP          0.55f   // Proportional - erhöht für stärkere Reaktion bei Speed 1014
+#define PID_KD          0.20f   // Differential - erhöht für bessere Dämpfung
+#define PID_DEADZONE    80      // Deadzone reduziert für präzisere Zentrierung
+#define PID_MIN_SPEED   120.0f  // Mindestgeschwindigkeit pro Motor (verhindert Totpunkt)
 
 // =============================================================================
 // SENSOR-SCHWELLWERTE
@@ -110,11 +112,10 @@
 // ID 4: Grüne Box
 // =============================================================================
 
-#define HUSKY_ID_RED_LINE    1      // Rote Linie (Parcour-Ende) UND Rote Box!
 #define HUSKY_ID_YELLOW_BALL 2      // Gelber Ball (1. Ball) -> Rote Box
 #define HUSKY_ID_BLUE_BALL   3      // Blauer Ball (2. Ball) -> Grüne Box
 #define HUSKY_ID_GREEN_BOX   4      // Grüne Box
-#define HUSKY_ID_RED_BOX     1      // Rote Box (gleiche ID wie rote Linie!)
+#define HUSKY_ID_RED_BOX     1      // Rote Box
 
 // Bildmitte für Ausrichtung (HuskyLens hat 320x240 Auflösung)
 #define HUSKY_CENTER_X      160
@@ -133,12 +134,14 @@
 #define GREEN_VALUE_MIN       120   // Minimaler Sensor-Wert für Grün
 #define GREEN_VALUE_MAX       280   // Maximaler Sensor-Wert für Grün
 #define GREEN_PAIR_MAX_DIFF   80    // Max. Differenz zwischen zwei Sensoren eines Paares
+#define WHITE_THRESHOLD       80    // Max. Wert für "Weiß" (Paar-Check)
+#define DROP_COUNT_MAX        3     // Signale nach N fehlenden Frames verwerfen
 
-// --- TIMING ---
-#define GREEN_CONFIRM_MS    220     // Bestätigungszeit für Grün-Erkennung
-#define SIGNAL_CONFIRM_MS   150     // Bestätigungszeit für geometrische Signale
-#define TURN_COOLDOWN_MS    2500    // Pause zwischen Abbiegungen
-#define RED_LINE_CONFIRM_MS 150     // HuskyLens muss rote Linie 150ms sehen
+// --- TIMING (angepasst an +56% Speed) ---
+#define GREEN_CONFIRM_MS    140     // Bestätigungszeit für Grün (war 220, skaliert mit Speed)
+#define SIGNAL_CONFIRM_MS   100     // Bestätigungszeit für 90°-Kurven (war 150, skaliert)
+#define TURN_COOLDOWN_MS    1200    // Pause zwischen Abbiegungen (war 1500)
+#define ROUTE_FAST_CONFIRM_MS 60    // Kürzere Bestätigungszeit wenn Route-Match
 
 // =============================================================================
 // SPIELFELD & BALLSUCHE KONFIGURATION
@@ -147,7 +150,8 @@
 // --- SPIELFELD DIMENSIONEN (in cm) ---
 #define FIELD_LENGTH_CM     90      // Länge des Ballsuchbereichs
 #define FIELD_WIDTH_CM      120     // Breite des Ballsuchbereichs
-#define SEARCH_ENTRY_DISTANCE 45    // Einfahrt ins Feld in cm (nach roter Linie)
+#define SEARCH_ENTRY_DISTANCE 30    // Einfahrt ins Feld in cm (nach roter Linie)
+#define SPEED_ENTRY_FIELD    820    // Geschwindigkeit beim Einfahren ins Feld (2x APPROACH_BALL)
 
 // --- BOX DIMENSIONEN (in cm) ---
 #define BOX_WALL_SIDE_CM    30      // Seiten an der Wand
@@ -176,8 +180,12 @@
 // =============================================================================
 
 #define STEPS_PER_CM        64
-#define STEPS_90_DEGREE     680     // 90°-Drehung
-#define STEPS_BEFORE_TURN   320     // 5cm vorfahren vor Drehung
+#define STEPS_90_DEGREE     680     // 90°-Drehung (Referenz)
+#define STEPS_80_DEGREE     604     // 80°-Drehung an Kreuzung (80/90 * 680)
+#define STEPS_BEFORE_TURN   192     // 3cm vorfahren vor Abbiegung
+#define TURN_DELAY_MS       30     // Kurze Pause zwischen Turn-Phasen
+#define SEARCH_STEP_MS      100    // Dauer pro Suchschritt (searchLine)
+#define STEPS_FORWARD_AT_CROSSING (STEPS_PER_CM * 7)  // 7 cm vorwärts an Kreuzung vor Drehung
 #define STEPS_BACKWARD      128     // 2cm zurück bei Linienverlust
 
 // --- GERADEAUS-KORREKTUR ---

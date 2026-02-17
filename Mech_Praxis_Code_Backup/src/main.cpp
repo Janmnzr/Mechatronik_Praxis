@@ -1,106 +1,277 @@
 #include <Arduino.h>
 #include <TimerOne.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <AccelStepper.h>
 #include "config.h"
-#include "hardware.h"
-#include "logic.h"
+#include "parcour.h"
+#include "ballsearch.h"
 
 // =============================================================================
-// MAIN.CPP - Kompletter Ablauf mit HuskyLens
+// MAIN.CPP - Kern + Shared Hardware
 // =============================================================================
-// Ablauf:
-// 1. Linienfolger (Greifer OBEN) bis HuskyLens rote Linie sieht
-// 2. Greifer runter + ins Ballfeld fahren
-// 3. Ball suchen (HuskyLens) - Roboter dreht bis Ball zentriert
-//    - Ball 1: ORANGE (ID 2) → ROTE Box (ID 1)
-//    - Ball 2: BLAU (ID 3) → GRÜNE Box (ID 4)
-// 4. Ball anfahren (Laser) - fährt auf Greifposition
-// 5. Farbe validieren (RGB-Sensor am Greifer)
-// 6. Ball aufnehmen (Servo halbe Höhe)
-// 7. Box suchen
-// 8. Seitlich an Box positionieren
-// 9. Ball abwerfen (Servo ganz hoch)
-// 10. Zweiten Ball holen
-// 11. Fertig!
+// Enthält:
+// - I2C Multiplexer
+// - Motoren
+// - LCD Display
+// - Buttons
+// - State Machine
+// - Menü
 // =============================================================================
-
-// ===== HUSKYLENS IDs (lokal definiert) =====
-// WICHTIG: Rote Linie und Rote Box haben GLEICHE ID!
-#define HUSKY_ID_RED_LINE     1      // Rote Linie (Parcour-Ende)
-#define HUSKY_ID_YELLOW_BALL  2      // Gelber Ball (erster Ball) -> Rote Box
-#define HUSKY_ID_BLUE_BALL    3      // Blauer Ball (zweiter Ball) -> Grüne Box
-#define HUSKY_ID_GREEN_BOX    4      // Grüne Box (für blauen Ball)
-#define HUSKY_ID_RED_BOX      1      // Rote Box (für gelben Ball) - GLEICHE ID wie rote Linie!
 
 // ===== HAUPT-MODI =====
-enum Mode { 
-    MODE_STOPPED, 
-    MODE_RUNNING,           // Linienfolger (Greifer oben!)
-    MODE_DEBUG, 
-    MODE_MANEUVERING,
-    MODE_BALL_SEARCH,       // Ball suchen mit HuskyLens
-    MODE_BALL_APPROACH,     // Auf Ball zufahren mit Laser
-    MODE_BALL_VALIDATE,     // Farbe mit RGB validieren
-    MODE_BALL_PICKUP,       // Ball aufnehmen
-    MODE_BOX_SEARCH,        // Box suchen mit HuskyLens
-    MODE_BOX_APPROACH,      // Auf Box zufahren
-    MODE_BOX_POSITION,      // Seitlich positionieren
-    MODE_BALL_DROP,         // Ball abwerfen
-    MODE_RETURN_TO_FIELD,   // Zurück ins Feld für 2. Ball
-    MODE_COMPLETE           // Fertig!
+enum Mode {
+    MODE_STOPPED = 0,
+    MODE_RUNNING = 1,
+    MODE_DEBUG = 2,
+    MODE_MANEUVERING = 3,
+    MODE_BALL_SEARCH = 4,
+    MODE_BALL_APPROACH = 5,
+    MODE_BALL_VALIDATE = 6,
+    MODE_BALL_PICKUP = 7,
+    MODE_BOX_SEARCH = 8,
+    MODE_BOX_APPROACH = 9,
+    MODE_BOX_POSITION = 10,
+    MODE_BALL_DROP = 11,
+    MODE_RETURN_TO_FIELD = 12,
+    MODE_COMPLETE = 13
 };
 
-enum Menu { 
-    MENU_START, 
-    MENU_CALIBRATE, 
-    MENU_DEBUG, 
+enum Menu {
+    MENU_START,
+    MENU_CALIBRATE,
+    MENU_DEBUG,
     MENU_MOTOR_TEST,
     MENU_BALL_TEST,
-    MENU_COUNT 
+    MENU_COUNT
 };
 
+// ===== GLOBALE OBJEKTE =====
+AccelStepper motorL(AccelStepper::DRIVER, STEP_PIN_L, DIR_PIN_L);
+AccelStepper motorR(AccelStepper::DRIVER, STEP_PIN_R, DIR_PIN_R);
+LiquidCrystal_I2C lcd(LCD_I2C_ADDRESS, LCD_COLS, LCD_ROWS);
+
 // ===== GLOBALE VARIABLEN =====
-// WICHTIG: volatile weil 'mode' sowohl in der ISR als auch im Hauptcode verwendet wird!
-static volatile Mode mode = MODE_STOPPED;
+volatile int mode = MODE_STOPPED;
 static Menu menu = MENU_START;
-static unsigned long lastTurnTime = 0;
-static unsigned long lastLcdUpdate = 0;
-static unsigned long modeStartTime = 0;
+unsigned long lastTurnTime = 0;
+unsigned long lastLcdUpdate = 0;
+unsigned long modeStartTime = 0;
 
 // Ballsuche Variablen
-static int ballsCollected = 0;          // 0, 1 oder 2
-static BallColor currentBallColor = COLOR_UNKNOWN;      // Von HuskyLens erkannt
-static BallColor validatedBallColor = COLOR_UNKNOWN;    // Von RGB bestätigt
-static int targetBoxID = 0;
+int ballsCollected = 0;
+BallColor currentBallColor = COLOR_UNKNOWN;
+BallColor validatedBallColor = COLOR_UNKNOWN;
+int targetBoxID = 0;
+static bool stoppedInBallMode = false;
 
-// Rote Linie Erkennung
-static unsigned long redLineStartTime = 0;
+// ===== PRIVATE VARIABLEN =====
+static unsigned long lastButtonPress = 0;
 
 // ===== VORWÄRTS-DEKLARATIONEN =====
+void disableMux();
+void selectMuxChannel(uint8_t channel);
+void lcdPrint(const char* line1, const char* line2);
+Button readButton();
 void runStateMachine();
-void runLineFollower();
-void executeTurn(int direction, SignalReason reason);
-bool searchLine();
 void handleMenu();
 void executeMenu(Menu item);
 const char* menuName(Menu m);
 
-void startBallSearchMode();
-void runBallSearch();
-void runBallApproach();
-void runBallValidate();
-void runBallPickup();
-void runBoxSearch();
-void runBoxApproach();
-void runBoxPosition();
-void runBallDrop();
-void runReturnToField();
+// =============================================================================
+// I2C MULTIPLEXER FUNKTIONEN
+// =============================================================================
 
-// ===== MOTOR ISR =====
+void initMultiplexer() {
+    Wire.begin();
+    Wire.setClock(100000);
+    disableMux();
+    delay(10);
+}
+
+void selectMuxChannel(uint8_t channel) {
+    if (channel > 7) return;
+    Wire.beginTransmission(MUX_ADDRESS);
+    Wire.write(1 << channel);
+    Wire.endTransmission();
+    delay(5);
+}
+
+void disableMux() {
+    Wire.beginTransmission(MUX_ADDRESS);
+    Wire.write(0);
+    Wire.endTransmission();
+}
+
+// =============================================================================
+// MOTOR FUNKTIONEN
+// =============================================================================
+
+void initMotors() {
+    pinMode(ENABLE_PIN, OUTPUT);
+    digitalWrite(ENABLE_PIN, HIGH);
+
+    motorL.setPinsInverted(true, false, false);
+    motorR.setPinsInverted(true, false, false);
+
+    motorL.setMaxSpeed(SPEED_MAX);
+    motorR.setMaxSpeed(SPEED_MAX);
+    motorL.setAcceleration(ACCELERATION);
+    motorR.setAcceleration(ACCELERATION);
+
+    motorL.setSpeed(0);
+    motorR.setSpeed(0);
+
+    delay(10);
+}
+
+void enableMotors() {
+    digitalWrite(ENABLE_PIN, LOW);
+}
+
+void disableMotors() {
+    digitalWrite(ENABLE_PIN, HIGH);
+}
+
+void setMotorSpeeds(float left, float right) {
+    left = constrain(left, -SPEED_MAX, SPEED_MAX);
+    right = constrain(right, -SPEED_MAX, SPEED_MAX);
+    motorL.setSpeed(left);
+    motorR.setSpeed(right);
+}
+
+void runMotors() {
+    motorL.runSpeed();
+    motorR.runSpeed();
+}
+
+void stopMotors() {
+    motorL.setSpeed(0);
+    motorR.setSpeed(0);
+    motorL.stop();
+    motorR.stop();
+}
+
+void executeSteps(int leftSteps, int rightSteps, int speed) {
+    enableMotors();
+
+    int leftDir = (leftSteps >= 0) ? 1 : -1;
+    int rightDir = (rightSteps >= 0) ? 1 : -1;
+
+    float speedL = speed * leftDir;
+    float speedR = speed * rightDir;
+
+    if (leftSteps == rightSteps) {
+        speedL *= STRAIGHT_CORRECTION_L;
+        speedR *= STRAIGHT_CORRECTION_R;
+    }
+
+    motorL.setSpeed(speedL);
+    motorR.setSpeed(speedR);
+    
+
+    long targetL = abs(leftSteps);
+    long targetR = abs(rightSteps);
+    long startL = motorL.currentPosition();
+    long startR = motorR.currentPosition();
+
+    while (true) {
+        if (readButton() == BTN_SELECT) {
+            stopMotors();
+            return;
+        }
+
+        long doneL = abs(motorL.currentPosition() - startL);
+        long doneR = abs(motorR.currentPosition() - startR);
+
+        if (doneL >= targetL) motorL.setSpeed(0);
+        if (doneR >= targetR) motorR.setSpeed(0);
+
+        if (doneL >= targetL && doneR >= targetR) break;
+
+        motorL.runSpeed();
+        motorR.runSpeed();
+    }
+
+    stopMotors();
+}
+
+// =============================================================================
+// LCD FUNKTIONEN
+// =============================================================================
+
+void initLCD() {
+    selectMuxChannel(MUX_CHANNEL_DISPLAY);
+    delay(50);
+
+    lcd.init();
+    lcd.backlight();
+    lcd.clear();
+
+    lcdPrint("LINIENFOLGER V3", "Modular!");
+}
+
+void lcdPrint(const char* line1, const char* line2) {
+    selectMuxChannel(MUX_CHANNEL_DISPLAY);
+
+    lcd.clear();
+
+    if (line1 != nullptr) {
+        lcd.setCursor(0, 0);
+        lcd.print(line1);
+    }
+
+    if (line2 != nullptr) {
+        lcd.setCursor(0, 1);
+        lcd.print(line2);
+    }
+}
+
+void lcdClear() {
+    selectMuxChannel(MUX_CHANNEL_DISPLAY);
+    lcd.clear();
+}
+
+// =============================================================================
+// BUTTON FUNKTIONEN
+// =============================================================================
+
+void initButtons() {
+    pinMode(BTN_DOWN_PIN, INPUT_PULLUP);
+    pinMode(BTN_UP_PIN, INPUT_PULLUP);
+    pinMode(BTN_SELECT_PIN, INPUT_PULLUP);
+}
+
+Button readButton() {
+    if (millis() - lastButtonPress < 200) {
+        return BTN_NONE;
+    }
+
+    if (digitalRead(BTN_DOWN_PIN) == LOW) {
+        lastButtonPress = millis();
+        return BTN_DOWN;
+    }
+
+    if (digitalRead(BTN_UP_PIN) == LOW) {
+        lastButtonPress = millis();
+        return BTN_UP;
+    }
+
+    if (digitalRead(BTN_SELECT_PIN) == LOW) {
+        lastButtonPress = millis();
+        return BTN_SELECT;
+    }
+
+    return BTN_NONE;
+}
+
+// =============================================================================
+// MOTOR ISR
+// =============================================================================
+
 void motorISR() {
-    // mode ist jetzt volatile - wird immer aus RAM gelesen
-    if (mode == MODE_RUNNING || mode == MODE_BALL_SEARCH || 
-        mode == MODE_BALL_APPROACH || mode == MODE_BOX_SEARCH ||
-        mode == MODE_BOX_APPROACH) {
+    if (mode == MODE_RUNNING || mode == MODE_BALL_SEARCH || mode == MODE_BALL_APPROACH
+        || mode == MODE_BOX_SEARCH || mode == MODE_BOX_APPROACH) {
         runMotors();
     }
 }
@@ -108,55 +279,57 @@ void motorISR() {
 // =============================================================================
 // SETUP
 // =============================================================================
+
 void setup() {
     #if DEBUG_SERIAL
     Serial.begin(115200);
     #endif
-    
+
     initMultiplexer();
     delay(100);
-    
+
     initLCD();
     initButtons();
     initSensors();
     initMotors();
     initServo();
     initLogic();
-    
+
     lcdPrint("Init Sensoren", "...");
-    
+
     // Laser Sensoren
     bool laserOk = initLaser();
     bool laser2Ok = initLaser2();
     delay(200);
-    
+
     // RGB Sensoren
     bool rgbOk = initRgbSensor();
     bool rgb2Ok = initRgbSensor2();
     delay(200);
-    
+
     // HuskyLens
     bool huskyOk = initHuskyLens();
     delay(200);
-    
+
     char line1[17], line2[17];
     snprintf(line1, 17, "L:%s RGB:%s", laserOk ? "OK" : "X", rgbOk ? "OK" : "X");
     snprintf(line2, 17, "Husky: %s", huskyOk ? "OK" : "ERR");
     lcdPrint(line1, line2);
     delay(2000);
-    
+
     Timer1.initialize(50);
     Timer1.attachInterrupt(motorISR);
-    
-    // Greifer startet OBEN (für Linienfolger)
+
     setServoUp();
-    
-    lcdPrint("MENUE:", "> START");
+
+    menu = MENU_CALIBRATE;  // Start mit Kalibrierung
+    lcdPrint("MENUE:", "> Kalibrieren");
 }
 
 // =============================================================================
 // MAIN LOOP
 // =============================================================================
+
 void loop() {
     runStateMachine();
 }
@@ -164,17 +337,26 @@ void loop() {
 // =============================================================================
 // STATE MACHINE
 // =============================================================================
+
 void runStateMachine() {
     // Notfall-Stopp
     if (readButton() == BTN_SELECT && mode != MODE_STOPPED) {
+        // Merken ob wir im Ballmodus waren
+        stoppedInBallMode = (mode >= MODE_BALL_SEARCH && mode <= MODE_RETURN_TO_FIELD);
         mode = MODE_STOPPED;
         stopMotors();
         disableMotors();
-        setServoUp();  // Greifer hoch bei Stopp
+        setServoUp();
         resetLogic();
-        ballsCollected = 0;
-        lcdPrint("GESTOPPT", "");
+        if (!stoppedInBallMode) {
+            resetRoute();
+            ballsCollected = 0;
+        }
+        lcdPrint("GESTOPPT", stoppedInBallMode ? "Ballfeld-Modus" : "");
         delay(500);
+        if (stoppedInBallMode) {
+            menu = MENU_BALL_TEST;
+        }
         lcdPrint("MENUE:", menuName(menu));
         return;
     }
@@ -193,13 +375,10 @@ void runStateMachine() {
             if (millis() - lastLcdUpdate > 200) {
                 HuskyResult ball = huskyFindBall();
                 char l1[17], l2[17];
-                
+
                 if (ball.found) {
                     snprintf(l1, 17, "Ball ID:%d", ball.id);
                     snprintf(l2, 17, "X:%d W:%d", ball.xCenter, ball.width);
-                } else if (huskySeesRedLine()) {
-                    snprintf(l1, 17, "ROTE LINIE!");
-                    snprintf(l2, 17, "Dist:%dmm", readLaserDistance());
                 } else {
                     snprintf(l1, 17, "Suche...");
                     snprintf(l2, 17, "Dist:%dmm", readLaserDistance());
@@ -211,48 +390,48 @@ void runStateMachine() {
 
         case MODE_MANEUVERING:
             break;
-            
+
         case MODE_BALL_SEARCH:
             runBallSearch();
             break;
-            
+
         case MODE_BALL_APPROACH:
             runBallApproach();
             break;
-            
+
         case MODE_BALL_VALIDATE:
             runBallValidate();
             break;
-            
+
         case MODE_BALL_PICKUP:
             runBallPickup();
             break;
-            
+
         case MODE_BOX_SEARCH:
             runBoxSearch();
             break;
-            
+
         case MODE_BOX_APPROACH:
             runBoxApproach();
             break;
-            
+
         case MODE_BOX_POSITION:
             runBoxPosition();
             break;
-            
+
         case MODE_BALL_DROP:
             runBallDrop();
             break;
-            
+
         case MODE_RETURN_TO_FIELD:
             runReturnToField();
             break;
-            
+
         case MODE_COMPLETE:
             lcdPrint("FERTIG!", "Beide Baelle!");
             stopMotors();
             disableMotors();
-            setServoUp();  // Greifer hoch am Ende
+            setServoUp();
             delay(5000);
             mode = MODE_STOPPED;
             ballsCollected = 0;
@@ -262,622 +441,17 @@ void runStateMachine() {
 }
 
 // =============================================================================
-// LINIENFOLGER (Greifer bleibt OBEN!)
-// =============================================================================
-void runLineFollower() {
-    updateSensors();
-    updateSignalDetection();
-    updateSpeed();
-
-    // HuskyLens prüft auf rote Linie
-    if (huskySeesRedLine()) {
-        if (redLineStartTime == 0) {
-            redLineStartTime = millis();
-        } else if (millis() - redLineStartTime >= RED_LINE_CONFIRM_MS) {
-            stopMotors();
-            lcdPrint("ROTE LINIE!", "-> Ballsuche");
-            delay(1500);
-            
-            redLineStartTime = 0;
-            startBallSearchMode();
-            return;
-        }
-    } else {
-        redLineStartTime = 0;
-    }
-
-    // Display - zeigt Position und Error für Debug
-    if (millis() - lastLcdUpdate > 150) {
-        char l1[17], l2[17];
-        int pos = readLinePosition();
-        int err = pos - LINE_CENTER;
-
-        // Zeile 1: Position (0-7000, Mitte=3500)
-        snprintf(l1, 17, "Pos:%d", pos);
-
-        // Zeile 2: Error (negativ=rechts, positiv=links)
-        if (redLineStartTime > 0) {
-            snprintf(l2, 17, "ROT! E:%d", err);
-        } else {
-            snprintf(l2, 17, "Err:%d S:%d", err, getCurrentSpeed());
-        }
-        lcdPrint(l1, l2);
-        lastLcdUpdate = millis();
-    }
-
-    // Linienverlust
-    if (!isLineDetected()) {
-        mode = MODE_MANEUVERING;
-        if (!searchLine()) {
-            mode = MODE_STOPPED;
-            stopMotors();
-            setServoUp();
-            lcdPrint("LINIE WEG!", "");
-            delay(2000);
-            return;
-        }
-        mode = MODE_RUNNING;
-        resetLogic();
-        return;
-    }
-
-    // Abbiegungen
-    SignalType sig = getConfirmedSignal();
-    if (sig != SIG_NONE && (millis() - lastTurnTime > TURN_COOLDOWN_MS)) {
-        int dir = getTurnDirection();
-        SignalReason reason = getSignalReason();
-
-        if (dir != 0) {
-            mode = MODE_MANEUVERING;
-            executeTurn(dir, reason);
-            mode = MODE_RUNNING;
-            lastTurnTime = millis();
-            clearConfirmedSignal();
-            resetLogic();
-            return;
-        }
-    }
-
-    updatePID();
-}
-
-// =============================================================================
-// BALLSUCHE STARTEN - Greifer fährt RUNTER!
-// =============================================================================
-void startBallSearchMode() {
-    mode = MODE_BALL_SEARCH;
-    modeStartTime = millis();
-    currentBallColor = COLOR_UNKNOWN;
-    validatedBallColor = COLOR_UNKNOWN;
-    
-    // *** WICHTIG: Greifer in Greifposition (unten) ***
-    lcdPrint("Greifer", "runter...");
-    setServoDown();
-    delay(800);  // Warten bis Servo in Position
-    
-    enableMotors();
-    
-    lcdPrint("Fahre ins", "Ballfeld...");
-    executeSteps(SEARCH_ENTRY_DISTANCE * STEPS_PER_CM, 
-                SEARCH_ENTRY_DISTANCE * STEPS_PER_CM, 
-                SPEED_APPROACH);
-    delay(500);
-    
-    lcdPrint("Suche Ball...", "");
-}
-
-// =============================================================================
-// BALL SUCHEN - HuskyLens erkennt Ball, Roboter dreht bis zentriert
-// Ball 1: Gelb suchen -> Rote Box, Ball 2: Blau suchen -> Grüne Box
-// =============================================================================
-void runBallSearch() {
-    if (millis() - modeStartTime > SEARCH_TIMEOUT_MS) {
-        lcdPrint("Timeout!", "Kein Ball");
-        delay(2000);
-        setServoUp();  // Greifer hoch bei Abbruch
-        mode = MODE_STOPPED;
-        return;
-    }
-
-    // Gezielt den richtigen Ball suchen
-    HuskyResult ball;
-    const char* searchColor;
-
-    if (ballsCollected == 0) {
-        // Erster Ball: GELB suchen -> Rote Box
-        ball = huskyFindYellowBall();
-        searchColor = "GELB";
-    } else {
-        // Zweiter Ball: BLAU suchen -> Grüne Box
-        ball = huskyFindBlueBall();
-        searchColor = "BLAU";
-    }
-
-    if (ball.found) {
-        int offset = huskyGetCenterOffset(ball);
-
-        char l1[17], l2[17];
-        snprintf(l1, 17, "%s Ball!", searchColor);
-        snprintf(l2, 17, "Offset:%d", offset);
-        lcdPrint(l1, l2);
-
-        // Ball zentriert?
-        if (abs(offset) <= HUSKY_TOLERANCE_X) {
-            stopMotors();
-            delay(200);
-
-            // Farbe von HuskyLens merken (wird später mit RGB validiert)
-            if (ball.id == HUSKY_ID_YELLOW_BALL) {
-                currentBallColor = COLOR_YELLOW;
-            } else if (ball.id == HUSKY_ID_BLUE_BALL) {
-                currentBallColor = COLOR_BLUE;
-            } else {
-                currentBallColor = COLOR_UNKNOWN;
-            }
-            
-            char l1[17];
-            snprintf(l1, 17, "Farbe: %s", getColorName(currentBallColor));
-            lcdPrint(l1, "-> Anfahren");
-            delay(500);
-            
-            mode = MODE_BALL_APPROACH;
-            modeStartTime = millis();
-        } else {
-            // Drehen bis Ball zentriert
-            if (offset > 0) {
-                // Ball ist rechts -> nach rechts drehen
-                setMotorSpeeds(SPEED_SEARCH, -SPEED_SEARCH);
-            } else {
-                // Ball ist links -> nach links drehen
-                setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
-            }
-        }
-    } else {
-        // Kein Ball gefunden -> weiter drehen und suchen
-        if (millis() - lastLcdUpdate > 300) {
-            char l1[17];
-            snprintf(l1, 17, "Suche %s", searchColor);
-            lcdPrint(l1, "Drehe...");
-            lastLcdUpdate = millis();
-        }
-        setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
-    }
-}
-
-// =============================================================================
-// BALL ANFAHREN - Laser misst Distanz, fährt auf Greifposition
-// =============================================================================
-void runBallApproach() {
-    uint16_t dist = readLaserDistance();
-    
-    if (millis() - lastLcdUpdate > 100) {
-        char l1[17], l2[17];
-        snprintf(l1, 17, "Anfahren...");
-        snprintf(l2, 17, "Dist: %d mm", dist);
-        lcdPrint(l1, l2);
-        lastLcdUpdate = millis();
-    }
-    
-    // Während Anfahrt: HuskyLens zur Kurskorrektur nutzen
-    HuskyResult ball = huskyFindBall();
-    if (ball.found) {
-        int offset = huskyGetCenterOffset(ball);
-
-        // RECHTS-KORREKTUR: Greifer steht zu weit links, also nach rechts verschieben
-        // Positiver Offset = Ball erscheint weiter rechts = Roboter fährt nach rechts
-        offset += 10;  // 10 Pixel nach rechts verschieben (anpassen falls nötig)
-
-        // offset > 0 = Ball rechts -> rechts drehen -> linker Motor schneller
-        // offset < 0 = Ball links -> links drehen -> rechter Motor schneller
-        float correction = offset * 0.2f;  // Reduziert von 0.3 auf 0.2
-        setMotorSpeeds(SPEED_APPROACH + correction, SPEED_APPROACH - correction);
-    } else {
-        // Ball nicht mehr sichtbar -> leicht nach rechts tendieren
-        setMotorSpeeds(SPEED_APPROACH + 10, SPEED_APPROACH - 10);
-    }
-    
-    // Zieldistanz erreicht?
-    if (dist > 0 && dist <= LASER_TARGET_DIST + LASER_APPROACH_TOLERANCE) {
-        stopMotors();
-        lcdPrint("Position OK", "Validiere...");
-        delay(300);
-        
-        mode = MODE_BALL_VALIDATE;
-        modeStartTime = millis();
-    }
-    
-    // Sicherheit: Falls zu nah
-    if (dist > 0 && dist < LASER_TARGET_DIST - 20) {
-        stopMotors();
-        lcdPrint("Zu nah!", "Validiere...");
-        delay(300);
-        
-        mode = MODE_BALL_VALIDATE;
-        modeStartTime = millis();
-    }
-    
-    // Timeout
-    if (millis() - modeStartTime > 20000) {
-        stopMotors();
-        lcdPrint("Timeout!", "Anfahrt");
-        delay(1000);
-        mode = MODE_BALL_SEARCH;  // Nochmal suchen
-        modeStartTime = millis();
-    }
-}
-
-// =============================================================================
-// BALL VALIDIEREN - RGB-Sensor am Greifer prüft Farbe
-// =============================================================================
-void runBallValidate() {
-    lcdPrint("RGB Messung...", "");
-    delay(200);
-    
-    // RGB-Sensor aktivieren und messen
-    enableRgbSensor();
-    delay(100);
-    
-    // Mehrere Messungen für Stabilität
-    BallColor measurements[3];
-    for (int i = 0; i < 3; i++) {
-        measurements[i] = detectBallColor();
-        delay(50);
-    }
-    
-    // Mehrheitsentscheidung
-    int yellowCount = 0, blueCount = 0;
-    for (int i = 0; i < 3; i++) {
-        if (measurements[i] == COLOR_YELLOW) yellowCount++;
-        if (measurements[i] == COLOR_BLUE) blueCount++;
-    }
-
-    if (yellowCount >= 2) {
-        validatedBallColor = COLOR_YELLOW;
-    } else if (blueCount >= 2) {
-        validatedBallColor = COLOR_BLUE;
-    } else {
-        validatedBallColor = measurements[0];  // Fallback: erste Messung
-    }
-
-    // Vergleich mit HuskyLens
-    char l1[17], l2[17];
-    snprintf(l1, 17, "RGB: %s", getColorName(validatedBallColor));
-
-    if (validatedBallColor == currentBallColor) {
-        snprintf(l2, 17, "Bestaetigt!");
-    } else if (validatedBallColor != COLOR_UNKNOWN) {
-        snprintf(l2, 17, "Korrigiert!");
-        // RGB-Sensor vertrauen (näher am Ball!)
-        currentBallColor = validatedBallColor;
-    } else {
-        snprintf(l2, 17, "HuskyLens nutzen");
-        // Falls RGB unsicher, HuskyLens-Ergebnis behalten
-    }
-
-    lcdPrint(l1, l2);
-    delay(1500);
-
-    // Ziel-Box basierend auf finaler Farbe setzen
-    // GELBER Ball -> ROTE Box (ID 1)
-    // BLAUER Ball -> GRÜNE Box (ID 4)
-    if (currentBallColor == COLOR_YELLOW) {
-        targetBoxID = HUSKY_ID_RED_BOX;     // Rote Box für gelben Ball
-    } else {
-        targetBoxID = HUSKY_ID_GREEN_BOX;   // Grüne Box für blauen Ball
-    }
-    
-    mode = MODE_BALL_PICKUP;
-    modeStartTime = millis();
-}
-
-// =============================================================================
-// BALL AUFNEHMEN - Greifer auf halbe Höhe
-// =============================================================================
-void runBallPickup() {
-    char l1[17], l2[17];
-    snprintf(l1, 17, "Ball: %s", getColorName(currentBallColor));
-    lcdPrint(l1, "Aufnehmen...");
-    
-    // Greifer auf halbe Höhe (Ball halten)
-    setServoHalf();
-    delay(1000);
-    
-    snprintf(l2, 17, "-> %s Box", (targetBoxID == HUSKY_ID_GREEN_BOX) ? "GRUEN" : "ROT");
-    lcdPrint(l1, l2);
-    delay(1500);
-    
-    mode = MODE_BOX_SEARCH;
-    modeStartTime = millis();
-}
-
-// =============================================================================
-// BOX SUCHEN
-// =============================================================================
-void runBoxSearch() {
-    if (millis() - modeStartTime > BOX_SEARCH_TIMEOUT_MS) {
-        lcdPrint("Timeout!", "Keine Box");
-        delay(2000);
-        setServoUp();  // Ball fallen lassen
-        mode = MODE_STOPPED;
-        return;
-    }
-    
-    HuskyResult box;
-    const char* boxName;
-    
-    if (targetBoxID == HUSKY_ID_GREEN_BOX) {
-        box = huskyFindGreenBox();
-        boxName = "GRUEN";
-    } else {
-        box = huskyFindRedBox();
-        boxName = "ROT";
-    }
-    
-    if (box.found) {
-        int offset = huskyGetCenterOffset(box);
-
-        char l1[17], l2[17];
-        // Zeige Box-Details: Offset und Größe (W x H)
-        snprintf(l1, 17, "%s O:%d", boxName, offset);
-        snprintf(l2, 17, "W:%d H:%d", box.width, box.height);
-        lcdPrint(l1, l2);
-
-        if (abs(offset) <= HUSKY_TOLERANCE_X) {
-            stopMotors();
-            lcdPrint("Box zentriert!", "-> Anfahren");
-            delay(500);
-            mode = MODE_BOX_APPROACH;
-            modeStartTime = millis();
-        } else {
-            if (offset > 0) {
-                setMotorSpeeds(SPEED_SEARCH, -SPEED_SEARCH);
-            } else {
-                setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
-            }
-        }
-    } else {
-        if (millis() - lastLcdUpdate > 300) {
-            char l1[17];
-            snprintf(l1, 17, "Suche %s Box", boxName);
-            lcdPrint(l1, "Drehe...");
-            lastLcdUpdate = millis();
-        }
-        setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
-    }
-}
-
-// =============================================================================
-// BOX ANFAHREN
-// =============================================================================
-void runBoxApproach() {
-    uint16_t dist = readLaserDistance();
-    
-    if (millis() - lastLcdUpdate > 100) {
-        char l1[17], l2[17];
-        snprintf(l1, 17, "Zur Box...");
-        snprintf(l2, 17, "Dist: %d mm", dist);
-        lcdPrint(l1, l2);
-        lastLcdUpdate = millis();
-    }
-    
-    HuskyResult box = (targetBoxID == HUSKY_ID_GREEN_BOX) ? 
-                       huskyFindGreenBox() : huskyFindRedBox();
-    
-    if (box.found) {
-        int offset = huskyGetCenterOffset(box);
-        float correction = offset * 0.1;
-        setMotorSpeeds(SPEED_APPROACH + correction, SPEED_APPROACH - correction);
-    } else {
-        setMotorSpeeds(SPEED_APPROACH, SPEED_APPROACH);
-    }
-    
-    if (dist > 0 && dist <= BOX_FRONT_DIST_MM) {
-        stopMotors();
-        mode = MODE_BOX_POSITION;
-        modeStartTime = millis();
-    }
-    
-    // Timeout
-    if (millis() - modeStartTime > 15000) {
-        stopMotors();
-        lcdPrint("Timeout!", "Box Anfahrt");
-        delay(1000);
-        mode = MODE_BOX_SEARCH;
-        modeStartTime = millis();
-    }
-}
-
-// =============================================================================
-// SEITLICH AN BOX POSITIONIEREN
-// =============================================================================
-void runBoxPosition() {
-    lcdPrint("Positioniere", "seitlich...");
-    
-    // 90° nach LINKS drehen
-    executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);
-    delay(300);
-    
-    // Position mit seitlichem Laser prüfen
-    lcdPrint("Pruefe", "Position...");
-    
-    uint16_t sideDist = readLaser2Distance();
-    
-    char l1[17], l2[17];
-    snprintf(l1, 17, "Seite: %dmm", sideDist);
-    
-    // Prüfen ob Abstand zur Box passt
-    if (sideDist > 0 && sideDist <= BOX_SIDE_DIST_MM + 50) {
-        snprintf(l2, 17, "Position OK!");
-        lcdPrint(l1, l2);
-        delay(1000);
-    } else {
-        // Seitlich korrigieren falls nötig
-        snprintf(l2, 17, "Korrigiere...");
-        lcdPrint(l1, l2);
-        
-        int attempts = 0;
-        while (attempts < 30) {
-            sideDist = readLaser2Distance();
-            
-            if (sideDist > 0 && sideDist <= BOX_SIDE_DIST_MM + 20) {
-                stopMotors();
-                break;
-            }
-            
-            // Langsam vorwärts fahren bis Box erkannt
-            setMotorSpeeds(SPEED_SIDEWAYS, SPEED_SIDEWAYS);
-            
-            unsigned long t = millis();
-            while (millis() - t < 100) {
-                runMotors();
-            }
-            
-            attempts++;
-        }
-        
-        stopMotors();
-        
-        // Finale Position anzeigen
-        sideDist = readLaser2Distance();
-        snprintf(l1, 17, "Final: %dmm", sideDist);
-        lcdPrint(l1, "Fertig!");
-        delay(1000);
-    }
-    
-    mode = MODE_BALL_DROP;
-}
-
-// =============================================================================
-// BALL ABWERFEN
-// =============================================================================
-void runBallDrop() {
-    lcdPrint("Ball abwerfen", "...");
-    
-    // Servo ganz hoch - Ball fällt in Box
-    setServoUp();
-    delay(1500);
-    
-    ballsCollected++;
-    
-    char l1[17];
-    snprintf(l1, 17, "Ball %d fertig!", ballsCollected);
-    lcdPrint(l1, "");
-    delay(1000);
-    
-    if (ballsCollected >= 2) {
-        mode = MODE_COMPLETE;
-    } else {
-        // Zurück für zweiten Ball
-        mode = MODE_RETURN_TO_FIELD;
-        modeStartTime = millis();
-    }
-}
-
-// =============================================================================
-// ZURÜCK INS FELD FÜR 2. BALL - RÜCKWÄRTS MIT LINKSKURVE
-// =============================================================================
-void runReturnToField() {
-    lcdPrint("Zurueck ins", "Feld...");
-    
-    // SCHRITT 1: Etwas rückwärts von der Box weg
-    //executeSteps(-5 * STEPS_PER_CM, -5 * STEPS_PER_CM, SPEED_APPROACH);
-    //delay(200);
-    
-    // SCHRITT 2: 90° nach links drehen
-    lcdPrint("Drehe links", "...");
-    executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);
-    delay(300);
-    
-    // SCHRITT 3: RÜCKWÄRTS ins Ballfeld fahren
-    lcdPrint("Rueckwaerts", "ins Feld...");
-    executeSteps(-30 * STEPS_PER_CM, -30 * STEPS_PER_CM, SPEED_APPROACH);
-    delay(300);
-    
-    // Greifer wieder runter für zweiten Ball
-    lcdPrint("Greifer", "runter...");
-    setServoDown();
-    delay(800);
-    
-    // Reset Farben
-    currentBallColor = COLOR_UNKNOWN;
-    validatedBallColor = COLOR_UNKNOWN;
-    
-    // Wieder Ball suchen (Roboter dreht sich automatisch bis Ball gefunden)
-    lcdPrint("Suche Ball 2", "...");
-    mode = MODE_BALL_SEARCH;
-    modeStartTime = millis();
-}
-
-// =============================================================================
-// MANÖVER
-// =============================================================================
-void executeTurn(int dir, SignalReason reason) {
-    char line2[17];
-    const char* dirText = (dir > 0) ? "LINKS" : "RECHTS";
-    snprintf(line2, 17, "%s %s", dirText, getReasonName(reason));
-    lcdPrint("ABBIEGEN", line2);
-
-    int stepsForward = STEPS_BEFORE_TURN;
-    if (reason == REASON_GREEN) {
-        stepsForward = STEPS_BEFORE_TURN + (2 * STEPS_PER_CM);
-    }
-    executeSteps(stepsForward, stepsForward, SPEED_TURN);
-    delay(30);
-
-    if (dir > 0) executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);
-    else         executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);
-
-    delay(30);
-}
-
-bool searchLine() {
-    lcdPrint("SUCHE...", "");
-
-    executeSteps(-STEPS_BACKWARD, -STEPS_BACKWARD, SPEED_TURN);
-    readLinePosition();
-    if (isLineDetected()) return true;
-
-    int dir = (readLinePosition() < LINE_CENTER) ? -1 : 1;
-
-    for (int phase = 0; phase < 2; phase++) {
-        int searchDir = (phase == 0) ? dir : -dir;
-        int steps = (phase == 0) ? 10 : 20;
-
-        for (int i = 0; i < steps; i++) {
-            if (readButton() == BTN_SELECT) {
-                stopMotors();
-                return false;
-            }
-
-            setMotorSpeeds(searchDir * 100, -searchDir * 100);
-            unsigned long t = millis();
-            while (millis() - t < 100) {
-                if (readButton() == BTN_SELECT) {
-                    stopMotors();
-                    return false;
-                }
-                runMotors();
-                readLinePosition();
-                if (isLineDetected()) { stopMotors(); return true; }
-            }
-        }
-    }
-
-    stopMotors();
-    return false;
-}
-
-// =============================================================================
 // MENÜ
 // =============================================================================
+
 void handleMenu() {
     Button btn = readButton();
     if (btn == BTN_NONE) return;
-    
+
     if (btn == BTN_UP)   menu = (Menu)((menu + MENU_COUNT - 1) % MENU_COUNT);
     if (btn == BTN_DOWN) menu = (Menu)((menu + 1) % MENU_COUNT);
     if (btn == BTN_SELECT) { executeMenu(menu); return; }
-    
+
     char buf[17];
     snprintf(buf, 17, "> %s", menuName(menu));
     lcdPrint("MENUE:", buf);
@@ -888,21 +462,23 @@ void executeMenu(Menu item) {
         case MENU_START:
             lcdPrint("START", "Linienfolger");
             resetLogic();
+            resetRoute();
             enableMotors();
             ballsCollected = 0;
-            setServoUp();  // Greifer OBEN beim Linienfolger!
+            setServoUp();
             mode = MODE_RUNNING;
             break;
-            
+
         case MENU_CALIBRATE:
             calibrateSensors();
-            lcdPrint("MENUE:", menuName(menu));
+            menu = MENU_START;  // Automatisch zu START springen
+            lcdPrint("MENUE:", "> START");
             break;
-            
+
         case MENU_DEBUG:
             mode = MODE_DEBUG;
             break;
-            
+
         case MENU_MOTOR_TEST:
             lcdPrint("TEST", "Links 90");
             enableMotors();
@@ -923,14 +499,21 @@ void executeMenu(Menu item) {
             stopMotors();
             lcdPrint("MENUE:", menuName(menu));
             break;
-            
+
         case MENU_BALL_TEST:
-            lcdPrint("BALL TEST", "Direkt starten");
+            if (stoppedInBallMode) {
+                char buf[17];
+                snprintf(buf, 17, "Balls: %d", ballsCollected);
+                lcdPrint("BALL WEITER", buf);
+            } else {
+                lcdPrint("BALL TEST", "Direkt starten");
+                ballsCollected = 0;
+            }
             delay(1000);
-            ballsCollected = 0;
+            stoppedInBallMode = false;
             startBallSearchMode();
             break;
-            
+
         default:
             break;
     }
