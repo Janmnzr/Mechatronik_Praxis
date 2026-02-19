@@ -99,7 +99,7 @@ void selectMuxChannel(uint8_t channel) {
 
 void disableMux() {
     Wire.beginTransmission(MUX_ADDRESS);
-    Wire.write(0);
+    Wire.write(0);   
     Wire.endTransmission();
 }
 
@@ -372,7 +372,7 @@ void runStateMachine() {
             break;
 
         case MODE_DEBUG:
-            if (millis() - lastLcdUpdate > 200) {
+            if (millis() - lastLcdUpdate > 500) {
                 HuskyResult ball = huskyFindBall();
                 char l1[17], l2[17];
 

@@ -371,16 +371,11 @@ void enterBallFieldFromParcour() {
     extern BallColor validatedBallColor;
 
     stopMotors();
-    lcdPrint("PARCOUR FERTIG!", "-> Ballfeld");
-    delay(1500);
 
-    lcdPrint("Fahre", "40cm vorwaerts");
     executeSteps(40 * STEPS_PER_CM, 40 * STEPS_PER_CM, SPEED_TURN);
-    delay(300);
 
-    lcdPrint("Greifer", "runter...");
     setServoDown();
-    delay(800);
+    delay(500);
 
     // Wechsel in Ballsuche-Modus (ohne zusätzliche Fahrt)
     mode = 4;  // MODE_BALL_SEARCH
@@ -401,7 +396,7 @@ void executeTurn(int dir, SignalReason reason) {
     executeSteps(STEPS_FORWARD_AT_CROSSING, STEPS_FORWARD_AT_CROSSING, SPEED_TURN);
     delay(TURN_DELAY_MS);
 
-    int turnSteps = STEPS_80_DEGREE;
+    int turnSteps = STEPS_90_DEGREE;
     if (dir > 0) executeSteps(-turnSteps, turnSteps, SPEED_TURN);
     else         executeSteps(turnSteps, -turnSteps, SPEED_TURN);
     delay(TURN_DELAY_MS);
@@ -449,21 +444,10 @@ bool searchLine() {
 void runLineFollower() {
     updateSensors();
 
-    // Display (nur Route-Schritt)
-    if (millis() - lastLcdUpdate > 300) {
-        char l1[17], l2[17];
-
-        if (routeStep < ROUTE_LENGTH) {
-            snprintf(l1, 17, "Schritt %d/%d", routeStep + 1, ROUTE_LENGTH);
-            // Nächste Abbiegung anzeigen
-            const char* nextTurn = (ROUTE_DIRS[routeStep] > 0) ? "Links" : "Rechts";
-            const char* turnType = (ROUTE_TYPES[routeStep] == REASON_GREEN) ? "+Gruen" : "";
-            snprintf(l2, 17, "%s %s", nextTurn, turnType);
-        } else {
-            snprintf(l1, 17, "Route fertig!");
-            snprintf(l2, 17, "Ballfeld ahead");
-        }
-        lcdPrint(l1, l2);
+    if (millis() - lastLcdUpdate > 500) {
+        char l1[17];
+        snprintf(l1, 17, "Linie %d/%d", routeStep + 1, ROUTE_LENGTH);
+        lcdPrint(l1, NULL);
         lastLcdUpdate = millis();
     }
 

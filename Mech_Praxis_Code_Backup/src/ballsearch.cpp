@@ -463,13 +463,17 @@ void initServo() {
     gripper.write(SERVO_MIN_POS);
     lastServoPosition = SERVO_MIN_POS;
     delay(500);
+    gripper.detach();  // Detach um Timer-Konflikt mit Motor-ISR zu vermeiden
 }
 
 void setServoPosition(int degrees) {
     degrees = constrain(degrees, SERVO_MIN_POS, SERVO_MAX_POS);
     if (degrees != lastServoPosition) {
+        gripper.attach(SERVO_PIN);
         gripper.write(degrees);
         lastServoPosition = degrees;
+        delay(300);
+        gripper.detach();
     }
 }
 
@@ -480,7 +484,9 @@ void setServoHalf() {
         return;
     }
 
-    int currentPos = gripper.read();
+    gripper.attach(SERVO_PIN);
+
+    int currentPos = lastServoPosition;
 
     if (currentPos < targetPos) {
         for (int pos = currentPos; pos <= targetPos; pos++) {
@@ -494,19 +500,27 @@ void setServoHalf() {
         }
     }
     lastServoPosition = targetPos;
+    delay(50);
+    gripper.detach();
 }
 
 void setServoUp() {
     if (lastServoPosition != SERVO_MAX_POS) {
+        gripper.attach(SERVO_PIN);
         gripper.write(SERVO_MAX_POS);
         lastServoPosition = SERVO_MAX_POS;
+        delay(500);
+        gripper.detach();
     }
 }
 
 void setServoDown() {
     if (lastServoPosition != SERVO_MIN_POS) {
+        gripper.attach(SERVO_PIN);
         gripper.write(SERVO_MIN_POS);
         lastServoPosition = SERVO_MIN_POS;
+        delay(500);
+        gripper.detach();
     }
 }
 
@@ -558,11 +572,6 @@ void runBallSearch() {
     if (ball.found) {
         int offset = huskyGetCenterOffset(ball);
 
-        char l1[17], l2[17];
-        snprintf(l1, 17, "%s Ball!", searchColor);
-        snprintf(l2, 17, "Offset:%d", offset);
-        lcdPrint(l1, l2);
-
         if (abs(offset) <= HUSKY_TOLERANCE_X) {
             stopMotors();
             delay(200);
@@ -575,10 +584,8 @@ void runBallSearch() {
                 currentBallColor = COLOR_UNKNOWN;
             }
 
-            char l1[17];
-            snprintf(l1, 17, "Farbe: %s", getColorName(currentBallColor));
-            lcdPrint(l1, "-> Anfahren");
-            delay(500);
+            lcdPrint("Ball gefunden", "Anfahren...");
+            delay(300);
 
             mode = MODE_BALL_APPROACH;
             modeStartTime = millis();
@@ -593,55 +600,79 @@ void runBallSearch() {
             }
         }
     } else {
-        if (millis() - lastLcdUpdate > 300) {
-            char l1[17];
-            snprintf(l1, 17, "Suche %s", searchColor);
-            lcdPrint(l1, "Drehe...");
+        if (millis() - lastLcdUpdate > 500) {
+            lcdPrint("Suche Ball", NULL);
             lastLcdUpdate = millis();
         }
-        setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
+        if (ballsCollected > 0) {
+            setMotorSpeeds(SPEED_SEARCH, -SPEED_SEARCH);  // 2. Ball: andere Richtung
+        } else {
+            setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);  // 1. Ball: links drehen
+        }
     }
 }
 
-void runBallApproach() {
-    uint16_t dist = readLaserDistance();
+// Rampe: skaliert Geschwindigkeit von 0 auf Zielwert über RAMP_UP_MS
+float rampSpeed(float targetSpeed, unsigned long startTime) {
+    float elapsed = millis() - startTime;
+    float ramp = constrain(elapsed / (float)RAMP_UP_MS, 0.0f, 1.0f);
+    return targetSpeed * ramp;
+}
 
-    if (millis() - lastLcdUpdate > 100) {
-        char l1[17], l2[17];
-        snprintf(l1, 17, "Anfahren...");
-        snprintf(l2, 17, "Dist: %d mm", dist);
-        lcdPrint(l1, l2);
+void runBallApproach() {
+    static uint16_t lastValidDist = 500;  // Letzte gültige Distanz merken
+
+    uint16_t dist = readLaserDistance();
+    if (dist > 0) {
+        lastValidDist = dist;  // Nur gültige Werte übernehmen
+    }
+
+    uint16_t useDist = lastValidDist;  // Immer mit letztem gültigen Wert regeln
+
+    if (millis() - lastLcdUpdate > 500) {
+        char l1[17];
+        snprintf(l1, 17, "Ball %dmm", useDist);
+        lcdPrint(l1, NULL);
         lastLcdUpdate = millis();
     }
+
+    // Geschwindigkeit nach Distanz regeln: weit weg = schnell, nah = langsam
+    float approachSpeed;
+    if (useDist < 100) {
+        approachSpeed = 200.0f;
+    } else {
+        approachSpeed = (float)map(constrain(useDist, 100, 400), 100, 400, 200, SPEED_APPROACH_BOX);
+    }
+
+    approachSpeed = rampSpeed(approachSpeed, modeStartTime);
 
     HuskyResult ball = huskyFindBall();
     if (ball.found) {
         int offset = huskyGetCenterOffset(ball);
-        offset += 10;
-        float correction = offset * 0.2f;
-        setMotorSpeeds(SPEED_APPROACH_BALL + correction, SPEED_APPROACH_BALL - correction);
+        offset += HUSKY_BALL_OFFSET_X;
+        // Korrektur skaliert mit Speed: weit weg + schnell = stärkere Lenkung
+        float corrFactor = 0.2f + (approachSpeed / (float)SPEED_APPROACH_BOX) * 0.4f;
+        float correction = offset * corrFactor;
+        setMotorSpeeds(approachSpeed + correction, approachSpeed - correction);
     } else {
-        setMotorSpeeds(SPEED_APPROACH_BALL + 10, SPEED_APPROACH_BALL - 10);
+        setMotorSpeeds(approachSpeed, approachSpeed);
     }
 
-    if (dist > 0 && dist <= LASER_TARGET_DIST + LASER_APPROACH_TOLERANCE) {
+    if (dist > 0 && dist < 85) {
         stopMotors();
-        lcdPrint("Position OK", "Aufnehmen...");
-        delay(300);
+        delay(50);
+        lcdPrint("Ball!", "Aufheben...");
+        setServoHalf();
 
         // Zielbox direkt aus Kamera-Farbe bestimmen (RGB-Validierung übersprungen)
         targetBoxID = (currentBallColor == COLOR_BLUE) ? HUSKY_ID_RED_BOX : HUSKY_ID_GREEN_BOX;
-        mode = MODE_BALL_PICKUP;
-        modeStartTime = millis();
-    }
 
-    if (dist > 0 && dist < LASER_TARGET_DIST - 20) {
-        stopMotors();
-        lcdPrint("Zu nah!", "Aufnehmen...");
-        delay(300);
+        char l1[17], l2[17];
+        snprintf(l1, 17, "Ball: %s", getColorName(currentBallColor));
+        snprintf(l2, 17, "-> %s Box", (targetBoxID == HUSKY_ID_GREEN_BOX) ? "GRUEN" : "ROT");
+        lcdPrint(l1, l2);
 
-        targetBoxID = (currentBallColor == COLOR_BLUE) ? HUSKY_ID_RED_BOX : HUSKY_ID_GREEN_BOX;
-        mode = MODE_BALL_PICKUP;
+        mode = MODE_BOX_SEARCH;
         modeStartTime = millis();
     }
 
@@ -711,11 +742,9 @@ void runBallPickup() {
     snprintf(l1, 17, "Ball: %s", getColorName(currentBallColor));
     lcdPrint(l1, "Aufnehmen...");
 
+    // Ball aufheben und auf halber Höhe halten (Tragposition)
     setServoHalf();
-    delay(300);
-
-    // Greifer sofort hochfahren (nicht-blockierend) und direkt zur Box-Suche
-    setServoUp();
+    delay(200);
 
     snprintf(l2, 17, "-> %s Box", (targetBoxID == HUSKY_ID_GREEN_BOX) ? "GRUEN" : "ROT");
     lcdPrint(l1, l2);
@@ -747,15 +776,10 @@ void runBoxSearch() {
     if (box.found) {
         int offset = huskyGetCenterOffset(box);
 
-        char l1[17], l2[17];
-        snprintf(l1, 17, "%s O:%d", boxName, offset);
-        snprintf(l2, 17, "W:%d H:%d", box.width, box.height);
-        lcdPrint(l1, l2);
-
         if (abs(offset) <= HUSKY_TOLERANCE_X) {
             stopMotors();
-            lcdPrint("Box zentriert!", "-> Anfahren");
-            delay(500);
+            lcdPrint("Box OK", "Anfahren...");
+            delay(300);
             mode = MODE_BOX_APPROACH;
             modeStartTime = millis();
         } else {
@@ -769,10 +793,8 @@ void runBoxSearch() {
             }
         }
     } else {
-        if (millis() - lastLcdUpdate > 300) {
-            char l1[17];
-            snprintf(l1, 17, "Suche %s Box", boxName);
-            lcdPrint(l1, "Drehe...");
+        if (millis() - lastLcdUpdate > 500) {
+            lcdPrint("Suche Box", NULL);
             lastLcdUpdate = millis();
         }
         setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
@@ -782,23 +804,24 @@ void runBoxSearch() {
 void runBoxApproach() {
     uint16_t dist = readLaserDistance();
 
-    if (millis() - lastLcdUpdate > 100) {
-        char l1[17], l2[17];
-        snprintf(l1, 17, "Zur Box...");
-        snprintf(l2, 17, "Dist: %d mm", dist);
-        lcdPrint(l1, l2);
+    if (millis() - lastLcdUpdate > 500) {
+        char l1[17];
+        snprintf(l1, 17, "Box %dmm", dist);
+        lcdPrint(l1, NULL);
         lastLcdUpdate = millis();
     }
 
     HuskyResult box = (targetBoxID == HUSKY_ID_GREEN_BOX) ?
                        huskyFindGreenBox() : huskyFindRedBox();
 
+    float boxSpeed = rampSpeed((float)SPEED_APPROACH_BOX, modeStartTime);
+
     if (box.found) {
         int offset = huskyGetCenterOffset(box);
         float correction = offset * 0.1;
-        setMotorSpeeds(SPEED_APPROACH_BOX + correction, SPEED_APPROACH_BOX - correction);
+        setMotorSpeeds(boxSpeed + correction, boxSpeed - correction);
     } else {
-        setMotorSpeeds(SPEED_APPROACH_BOX, SPEED_APPROACH_BOX);
+        setMotorSpeeds(boxSpeed, boxSpeed);
     }
 
     if (dist > 0 && dist <= BOX_FRONT_DIST_MM) {
@@ -837,26 +860,8 @@ void runBoxPosition() {
         snprintf(l2, 17, "Korrigiere...");
         lcdPrint(l1, l2);
 
-        int attempts = 0;
-        while (attempts < 30) {
-            sideDist = readLaser2Distance();
-
-            if (sideDist > 0 && sideDist <= BOX_SIDE_DIST_MM + 20) {
-                stopMotors();
-                break;
-            }
-
-            setMotorSpeeds(SPEED_SIDEWAYS, SPEED_SIDEWAYS);
-
-            unsigned long t = millis();
-            while (millis() - t < 100) {
-                runMotors();
-            }
-
-            attempts++;
-        }
-
-        stopMotors();
+        executeSteps(-200, 0, SPEED_SIDEWAYS);
+        delay(300);
 
         sideDist = readLaser2Distance();
         snprintf(l1, 17, "Final: %dmm", sideDist);
@@ -896,11 +901,11 @@ void runReturnToField() {
     delay(300);
 
     lcdPrint("Rueckwaerts", "ins Feld...");
-    executeSteps(-30 * STEPS_PER_CM, -30 * STEPS_PER_CM, SPEED_APPROACH_BALL);
+    executeSteps(-30 * STEPS_PER_CM, -30 * STEPS_PER_CM, SPEED_APPROACH_BOX);
     delay(300);
 
     lcdPrint("Greifer", "runter...");
-    setServoDown();
+    setServoDown();     
     delay(800);
 
     currentBallColor = COLOR_UNKNOWN;

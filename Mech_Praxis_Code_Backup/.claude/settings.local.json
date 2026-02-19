@@ -3,7 +3,13 @@
     "allow": [
       "Bash(C:UsersSami.platformiopenvScriptsplatformio.exe run)",
       "Bash(\"C:\\\\Users\\\\Sami\\\\.platformio\\\\penv\\\\Scripts\\\\platformio.exe\" run)",
-      "Bash(\"C:\\\\Users\\\\Sami\\\\.platformio\\\\penv\\\\Scripts\\\\platformio.exe\" run --target upload)"
+      "Bash(\"C:\\\\Users\\\\Sami\\\\.platformio\\\\penv\\\\Scripts\\\\platformio.exe\" run --target upload)",
+      "Bash(platformio run:*)",
+      "Bash(pio run:*)",
+      "Bash(where:*)",
+      "Bash(dir:*)",
+      "Bash(cmd /c \"where pio 2>nul || where platformio 2>nul || dir /s /b C:\\\\Users\\\\Sami\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe 2>nul || echo NOT_FOUND\")",
+      "Bash(git add:*)"
     ]
   }
 }

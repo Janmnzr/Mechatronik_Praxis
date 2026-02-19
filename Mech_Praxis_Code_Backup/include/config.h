@@ -71,11 +71,12 @@
 #define SPEED_MAX       874     // Maximale Geschwindigkeit
 #define SPEED_NORMAL    710     // Normale Linienfolge-Geschwindigkeit
 #define SPEED_SLOW      491     // Reduzierte Geschwindigkeit bei Grün-Erkennung
-#define SPEED_TURN      382     // Geschwindigkeit für 90°-Drehungen
+#define SPEED_TURN      344     // Geschwindigkeit für 90°-Drehungen
 #define SPEED_SEARCH    360     // Geschwindigkeit für Ballsuche-Drehung (1.5x)
 #define SPEED_APPROACH_BALL  410     // Geschwindigkeit beim Anfahren des Balls
 #define SPEED_APPROACH_BOX   820     // Geschwindigkeit beim Anfahren der Box (2x)
 #define SPEED_SIDEWAYS  327     // Geschwindigkeit für seitliches Positionieren (1.5x)
+#define RAMP_UP_MS      400     // Rampe: 0 bis Zielgeschwindigkeit in 400ms
 
 // ===== BESCHLEUNIGUNG =====
 #define ACCELERATION    874     // Steps/s²
@@ -121,6 +122,7 @@
 #define HUSKY_CENTER_X      160
 #define HUSKY_CENTER_Y      120
 #define HUSKY_TOLERANCE_X   20      // Toleranz für "zentriert" in Pixeln
+#define HUSKY_BALL_OFFSET_X  20     // Kamera-Korrektur: positiv = Roboter zielt mehr rechts
 #define HUSKY_MIN_SIZE      15      // Minimale Objektgröße für Erkennung
 
 // =============================================================================
@@ -180,8 +182,8 @@
 // =============================================================================
 
 #define STEPS_PER_CM        64
-#define STEPS_90_DEGREE     680     // 90°-Drehung (Referenz)
-#define STEPS_80_DEGREE     604     // 80°-Drehung an Kreuzung (80/90 * 680)
+#define STEPS_90_DEGREE     650     // 90°-Drehung (Referenz)
+#define STEPS_80_DEGREE     578     // 80°-Drehung an Kreuzung (80/90 * 650)
 #define STEPS_BEFORE_TURN   192     // 3cm vorfahren vor Abbiegung
 #define TURN_DELAY_MS       30     // Kurze Pause zwischen Turn-Phasen
 #define SEARCH_STEP_MS      100    // Dauer pro Suchschritt (searchLine)
