@@ -9,7 +9,9 @@
       "Bash(where:*)",
       "Bash(dir:*)",
       "Bash(cmd /c \"where pio 2>nul || where platformio 2>nul || dir /s /b C:\\\\Users\\\\Sami\\\\.platformio\\\\penv\\\\Scripts\\\\pio.exe 2>nul || echo NOT_FOUND\")",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: Servo-Timer-Konflikt behoben, Geschwindigkeitsrampe und Tuning\n\n- Servo attach/detach bei jeder Bewegung um Timer1-ISR-Konflikt zu vermeiden\n- Geschwindigkeitsrampe \\(rampSpeed\\) für sanftes Anfahren bei Ball/Box-Approach\n- Distanzbasierte Geschwindigkeitsregelung beim Ball-Anfahren \\(weit=schnell, nah=langsam\\)\n- Ball-Pickup übersprungen: direkt von Approach zu Box-Suche mit setServoHalf\\(\\)\n- LCD-Ausgaben vereinfacht und Update-Intervall auf 500ms reduziert\n- Tuning: SPEED_TURN 382->344, STEPS_90_DEGREE 680->650, Parcour nutzt 90° statt 80°\n- Suchrichtung für 2. Ball invertiert\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)"
     ]
   }
 }

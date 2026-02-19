@@ -27,8 +27,6 @@ enum Mode {
     MODE_MANEUVERING = 3,
     MODE_BALL_SEARCH = 4,
     MODE_BALL_APPROACH = 5,
-    MODE_BALL_VALIDATE = 6,
-    MODE_BALL_PICKUP = 7,
     MODE_BOX_SEARCH = 8,
     MODE_BOX_APPROACH = 9,
     MODE_BOX_POSITION = 10,
@@ -227,11 +225,6 @@ void lcdPrint(const char* line1, const char* line2) {
     }
 }
 
-void lcdClear() {
-    selectMuxChannel(MUX_CHANNEL_DISPLAY);
-    lcd.clear();
-}
-
 // =============================================================================
 // BUTTON FUNKTIONEN
 // =============================================================================
@@ -299,12 +292,12 @@ void setup() {
 
     // Laser Sensoren
     bool laserOk = initLaser();
-    bool laser2Ok = initLaser2();
+    initLaser2();
     delay(200);
 
     // RGB Sensoren
     bool rgbOk = initRgbSensor();
-    bool rgb2Ok = initRgbSensor2();
+    initRgbSensor2();
     delay(200);
 
     // HuskyLens
@@ -397,14 +390,6 @@ void runStateMachine() {
 
         case MODE_BALL_APPROACH:
             runBallApproach();
-            break;
-
-        case MODE_BALL_VALIDATE:
-            runBallValidate();
-            break;
-
-        case MODE_BALL_PICKUP:
-            runBallPickup();
             break;
 
         case MODE_BOX_SEARCH:

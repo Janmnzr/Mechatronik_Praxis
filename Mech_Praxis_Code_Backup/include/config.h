@@ -47,9 +47,6 @@
 #define MUX_CHANNEL_LASER2   5       // SD5/SC5 - VL53L0X Laser seitlich (0x29)
 #define MUX_CHANNEL_RGB2     6       // SD6/SC6 - TCS34725 RGB seitlich (0x29)
 
-// ===== HUSKYLENS =====
-#define HUSKYLENS_ADDRESS   0x32    // Standard I2C Adresse HuskyLens
-
 // ===== LCD I2C (über Multiplexer) =====
 #define LCD_I2C_ADDRESS 0x21    // Dein LCD hat Adresse 0x21!
 #define LCD_COLS        16
@@ -73,7 +70,6 @@
 #define SPEED_SLOW      491     // Reduzierte Geschwindigkeit bei Grün-Erkennung
 #define SPEED_TURN      344     // Geschwindigkeit für 90°-Drehungen
 #define SPEED_SEARCH    360     // Geschwindigkeit für Ballsuche-Drehung (1.5x)
-#define SPEED_APPROACH_BALL  410     // Geschwindigkeit beim Anfahren des Balls
 #define SPEED_APPROACH_BOX   820     // Geschwindigkeit beim Anfahren der Box (2x)
 #define SPEED_SIDEWAYS  327     // Geschwindigkeit für seitliches Positionieren (1.5x)
 #define RAMP_UP_MS      400     // Rampe: 0 bis Zielgeschwindigkeit in 400ms
@@ -98,29 +94,11 @@
 #define LINE_CENTER     3500    // Mitte der Linie (0-7000 Bereich)
 
 // =============================================================================
-// HUSKYLENS OBJEKT-IDs (Color Recognition Modus!)
+// HUSKYLENS KONFIGURATION
 // =============================================================================
-// Anleitung zum Anlernen:
-// 1. Modus auf "Color Recognition" stellen (Scrollrad)
-// 2. "Learn Multiple" im Menü aktivieren
-// 3. Objekt vor Kamera halten, Lernknopf drücken
-// 4. Nächste ID: Scrollrad nach rechts drehen, dann Lernknopf
-//
-// AKTUELLE REIHENFOLGE:
-// ID 1: Rote Linie + Rote Box (gleiche Farbe!)
-// ID 2: Gelber Ball (1. Ball) -> Rote Box
-// ID 3: Blauer Ball (2. Ball) -> Grüne Box
-// ID 4: Grüne Box
-// =============================================================================
-
-#define HUSKY_ID_YELLOW_BALL 2      // Gelber Ball (1. Ball) -> Rote Box
-#define HUSKY_ID_BLUE_BALL   3      // Blauer Ball (2. Ball) -> Grüne Box
-#define HUSKY_ID_GREEN_BOX   4      // Grüne Box
-#define HUSKY_ID_RED_BOX     1      // Rote Box
 
 // Bildmitte für Ausrichtung (HuskyLens hat 320x240 Auflösung)
 #define HUSKY_CENTER_X      160
-#define HUSKY_CENTER_Y      120
 #define HUSKY_TOLERANCE_X   20      // Toleranz für "zentriert" in Pixeln
 #define HUSKY_BALL_OFFSET_X  20     // Kamera-Korrektur: positiv = Roboter zielt mehr rechts
 #define HUSKY_MIN_SIZE      15      // Minimale Objektgröße für Erkennung
@@ -143,35 +121,20 @@
 #define GREEN_CONFIRM_MS    140     // Bestätigungszeit für Grün (war 220, skaliert mit Speed)
 #define SIGNAL_CONFIRM_MS   100     // Bestätigungszeit für 90°-Kurven (war 150, skaliert)
 #define TURN_COOLDOWN_MS    1200    // Pause zwischen Abbiegungen (war 1500)
-#define ROUTE_FAST_CONFIRM_MS 60    // Kürzere Bestätigungszeit wenn Route-Match
 
 // =============================================================================
 // SPIELFELD & BALLSUCHE KONFIGURATION
 // =============================================================================
 
-// --- SPIELFELD DIMENSIONEN (in cm) ---
-#define FIELD_LENGTH_CM     90      // Länge des Ballsuchbereichs
-#define FIELD_WIDTH_CM      120     // Breite des Ballsuchbereichs
 #define SEARCH_ENTRY_DISTANCE 30    // Einfahrt ins Feld in cm (nach roter Linie)
 #define SPEED_ENTRY_FIELD    820    // Geschwindigkeit beim Einfahren ins Feld (2x APPROACH_BALL)
 
-// --- BOX DIMENSIONEN (in cm) ---
-#define BOX_WALL_SIDE_CM    30      // Seiten an der Wand
-#define BOX_FIELD_SIDE_CM   40      // Seite ins Feld ragend
-
 // --- VL53L0X LASER SENSOR ---
 #define LASER_TIMING_BUDGET_MS  50      // Messzeit (höher = genauer)
-#define LASER_MAX_RANGE_MM      1200    // Maximale Reichweite
-#define LASER_TARGET_DIST       70      // Zieldistanz zum Ball in mm (Greifer-Position)
-#define LASER_APPROACH_TOLERANCE 10     // Toleranz beim Anfahren (+/- mm)
 
 // --- BOX ANFAHRT ---
 #define BOX_FRONT_DIST_MM       90      // Frontaler Abstand zur Box (8cm)
 #define BOX_SIDE_DIST_MM        30      // Seitlicher Abstand zur Box (3cm)
-
-// --- TCS34725 RGB SENSOR ---
-#define RGB_INTEGRATION_TIME    50      // Integrationszeit in ms
-#define RGB_GAIN                4       // Gain (1, 4, 16, 60)
 
 // --- BALLSUCHE TIMING ---
 #define SEARCH_TIMEOUT_MS       30000   // Max 30 Sekunden pro Ball suchen
@@ -183,8 +146,6 @@
 
 #define STEPS_PER_CM        64
 #define STEPS_90_DEGREE     650     // 90°-Drehung (Referenz)
-#define STEPS_80_DEGREE     578     // 80°-Drehung an Kreuzung (80/90 * 650)
-#define STEPS_BEFORE_TURN   192     // 3cm vorfahren vor Abbiegung
 #define TURN_DELAY_MS       30     // Kurze Pause zwischen Turn-Phasen
 #define SEARCH_STEP_MS      100    // Dauer pro Suchschritt (searchLine)
 #define STEPS_FORWARD_AT_CROSSING (STEPS_PER_CM * 7)  // 7 cm vorwärts an Kreuzung vor Drehung

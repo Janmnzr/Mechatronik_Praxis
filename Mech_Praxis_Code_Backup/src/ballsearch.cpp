@@ -5,22 +5,13 @@
 // =============================================================================
 // BALLSEARCH.CPP - Ball und Box Handling Modul
 // =============================================================================
-// Enthält:
-// - HuskyLens Kamera (ex hardware.cpp)
-// - Laser Sensoren (ex hardware.cpp)
-// - RGB Sensoren (ex hardware.cpp)
-// - Servo Greifer (ex hardware.cpp)
-// - Ball/Box Funktionen (ex main.cpp)
-// =============================================================================
 
 // ===== EXTERNE FUNKTIONEN (aus main.cpp) =====
 extern void selectMuxChannel(uint8_t channel);
 extern void lcdPrint(const char* line1, const char* line2);
 extern void setMotorSpeeds(float left, float right);
-extern void runMotors();
 extern void stopMotors();
 extern void enableMotors();
-extern void disableMotors();
 extern void executeSteps(int leftSteps, int rightSteps, int speed);
 
 // ===== EXTERNE VARIABLEN (aus main.cpp) =====
@@ -34,11 +25,8 @@ extern int targetBoxID;
 
 // ===== MODE KONSTANTEN =====
 #define MODE_STOPPED        0
-#define MODE_RUNNING        1
 #define MODE_BALL_SEARCH    4
 #define MODE_BALL_APPROACH  5
-#define MODE_BALL_VALIDATE  6
-#define MODE_BALL_PICKUP    7
 #define MODE_BOX_SEARCH     8
 #define MODE_BOX_APPROACH   9
 #define MODE_BOX_POSITION   10
@@ -47,7 +35,6 @@ extern int targetBoxID;
 #define MODE_COMPLETE       13
 
 // ===== HUSKYLENS IDs =====
-// RED_LINE entfernt - nicht mehr benötigt
 #define HUSKY_ID_YELLOW_BALL  2
 #define HUSKY_ID_BLUE_BALL    3
 #define HUSKY_ID_GREEN_BOX    4
@@ -62,8 +49,6 @@ Servo gripper;
 // ===== PRIVATE VARIABLEN =====
 static bool laserInitialized = false;
 static bool laser2Initialized = false;
-static bool rgbInitialized = false;
-static bool rgb2Initialized = false;
 static bool huskyInitialized = false;
 static int lastServoPosition = -1;
 
@@ -85,10 +70,6 @@ bool initHuskyLens() {
 
     huskyInitialized = true;
     return true;
-}
-
-bool isHuskyLensReady() {
-    return huskyInitialized;
 }
 
 HuskyResult huskyFindByID(int id) {
@@ -157,13 +138,6 @@ HuskyResult huskyFindRedBox() {
     return result;
 }
 
-bool huskyIsObjectCentered(HuskyResult result) {
-    if (!result.found) return false;
-
-    int offset = abs(result.xCenter - HUSKY_CENTER_X);
-    return (offset <= HUSKY_TOLERANCE_X);
-}
-
 int huskyGetCenterOffset(HuskyResult result) {
     if (!result.found) return 0;
     return result.xCenter - HUSKY_CENTER_X;
@@ -204,10 +178,6 @@ uint16_t readLaserDistance() {
     return distance;
 }
 
-bool isLaserReady() {
-    return laserInitialized;
-}
-
 bool initLaser2() {
     selectMuxChannel(MUX_CHANNEL_LASER2);
     delay(50);
@@ -239,10 +209,6 @@ uint16_t readLaser2Distance() {
     return distance;
 }
 
-bool isLaser2Ready() {
-    return laser2Initialized;
-}
-
 // =============================================================================
 // TCS34725 RGB SENSOREN - Hilfsfunktionen
 // =============================================================================
@@ -263,17 +229,6 @@ static uint8_t tcsRead8(uint8_t reg) {
     return Wire.read();
 }
 
-static uint16_t tcsRead16(uint8_t reg) {
-    Wire.beginTransmission(TCS34725_ADDRESS);
-    Wire.write(TCS34725_COMMAND | reg);
-    Wire.endTransmission();
-
-    Wire.requestFrom(TCS34725_ADDRESS, (uint8_t)2);
-    uint16_t low = Wire.read();
-    uint16_t high = Wire.read();
-    return (high << 8) | low;
-}
-
 // =============================================================================
 // TCS34725 RGB SENSOR - FRONT
 // =============================================================================
@@ -284,7 +239,6 @@ bool initRgbSensor() {
 
     uint8_t id = tcsRead8(TCS34725_ID);
     if (id != 0x44 && id != 0x4D) {
-        rgbInitialized = false;
         return false;
     }
 
@@ -294,68 +248,7 @@ bool initRgbSensor() {
     delay(3);
     tcsWrite8(TCS34725_ENABLE, 0x03);
 
-    rgbInitialized = true;
     return true;
-}
-
-void enableRgbSensor() {
-    if (!rgbInitialized) {
-        initRgbSensor();
-    }
-}
-
-void readRgbValues(uint16_t* r, uint16_t* g, uint16_t* b, uint16_t* c) {
-    if (!rgbInitialized) {
-        *r = *g = *b = *c = 0;
-        return;
-    }
-
-    selectMuxChannel(MUX_CHANNEL_RGB);
-    delay(30);
-
-    *c = tcsRead16(TCS34725_CDATAL);
-    *r = tcsRead16(TCS34725_CDATAL + 2);
-    *g = tcsRead16(TCS34725_CDATAL + 4);
-    *b = tcsRead16(TCS34725_CDATAL + 6);
-}
-
-BallColor detectBallColor() {
-    if (!rgbInitialized) return COLOR_UNKNOWN;
-
-    uint16_t r, g, b, c;
-    readRgbValues(&r, &g, &b, &c);
-
-    if (c < 100) return COLOR_UNKNOWN;
-
-    float sum = r + g + b;
-    if (sum < 1) sum = 1;
-
-    float rNorm = (r / sum) * 255;
-    float gNorm = (g / sum) * 255;
-    float bNorm = (b / sum) * 255;
-
-    if (rNorm > 120 && rNorm > gNorm * 1.5 && rNorm > bNorm * 1.5) {
-        if (gNorm > 60) return COLOR_ORANGE;
-        return COLOR_RED;
-    }
-
-    if (gNorm > 100 && gNorm > rNorm * 1.3 && gNorm > bNorm * 1.3) {
-        return COLOR_GREEN;
-    }
-
-    if (bNorm > 100 && bNorm > rNorm * 1.3 && bNorm > gNorm * 1.3) {
-        return COLOR_BLUE;
-    }
-
-    if (rNorm > 80 && gNorm > 80 && bNorm < 70) {
-        return COLOR_YELLOW;
-    }
-
-    if (c > 1000 && abs(rNorm - gNorm) < 30 && abs(gNorm - bNorm) < 30) {
-        return COLOR_WHITE;
-    }
-
-    return COLOR_UNKNOWN;
 }
 
 // =============================================================================
@@ -368,7 +261,6 @@ bool initRgbSensor2() {
 
     uint8_t id = tcsRead8(TCS34725_ID);
     if (id != 0x44 && id != 0x4D) {
-        rgb2Initialized = false;
         return false;
     }
 
@@ -378,68 +270,7 @@ bool initRgbSensor2() {
     delay(3);
     tcsWrite8(TCS34725_ENABLE, 0x03);
 
-    rgb2Initialized = true;
     return true;
-}
-
-void enableRgbSensor2() {
-    if (!rgb2Initialized) {
-        initRgbSensor2();
-    }
-}
-
-void readRgb2Values(uint16_t* r, uint16_t* g, uint16_t* b, uint16_t* c) {
-    if (!rgb2Initialized) {
-        *r = *g = *b = *c = 0;
-        return;
-    }
-
-    selectMuxChannel(MUX_CHANNEL_RGB2);
-    delay(30);
-
-    *c = tcsRead16(TCS34725_CDATAL);
-    *r = tcsRead16(TCS34725_CDATAL + 2);
-    *g = tcsRead16(TCS34725_CDATAL + 4);
-    *b = tcsRead16(TCS34725_CDATAL + 6);
-}
-
-BallColor detectBallColor2() {
-    if (!rgb2Initialized) return COLOR_UNKNOWN;
-
-    uint16_t r, g, b, c;
-    readRgb2Values(&r, &g, &b, &c);
-
-    if (c < 100) return COLOR_UNKNOWN;
-
-    float sum = r + g + b;
-    if (sum < 1) sum = 1;
-
-    float rNorm = (r / sum) * 255;
-    float gNorm = (g / sum) * 255;
-    float bNorm = (b / sum) * 255;
-
-    if (rNorm > 120 && rNorm > gNorm * 1.5 && rNorm > bNorm * 1.5) {
-        if (gNorm > 60) return COLOR_ORANGE;
-        return COLOR_RED;
-    }
-
-    if (gNorm > 100 && gNorm > rNorm * 1.3 && gNorm > bNorm * 1.3) {
-        return COLOR_GREEN;
-    }
-
-    if (bNorm > 100 && bNorm > rNorm * 1.3 && bNorm > gNorm * 1.3) {
-        return COLOR_BLUE;
-    }
-
-    if (rNorm > 80 && gNorm > 80 && bNorm < 70) {
-        return COLOR_YELLOW;
-    }
-
-    if (c > 1000 && abs(rNorm - gNorm) < 30 && abs(gNorm - bNorm) < 30) {
-        return COLOR_WHITE;
-    }
-
-    return COLOR_UNKNOWN;
 }
 
 const char* getColorName(BallColor color) {
@@ -464,17 +295,6 @@ void initServo() {
     lastServoPosition = SERVO_MIN_POS;
     delay(500);
     gripper.detach();  // Detach um Timer-Konflikt mit Motor-ISR zu vermeiden
-}
-
-void setServoPosition(int degrees) {
-    degrees = constrain(degrees, SERVO_MIN_POS, SERVO_MAX_POS);
-    if (degrees != lastServoPosition) {
-        gripper.attach(SERVO_PIN);
-        gripper.write(degrees);
-        lastServoPosition = degrees;
-        delay(300);
-        gripper.detach();
-    }
 }
 
 void setServoHalf() {
@@ -525,7 +345,7 @@ void setServoDown() {
 }
 
 // =============================================================================
-// BALL/BOX FUNKTIONEN (ex main.cpp)
+// BALL/BOX FUNKTIONEN
 // =============================================================================
 
 void startBallSearchMode() {
@@ -559,14 +379,11 @@ void runBallSearch() {
     }
 
     HuskyResult ball;
-    const char* searchColor;
 
     if (ballsCollected == 0) {
         ball = huskyFindBlueBall();
-        searchColor = "BLAU";
     } else {
         ball = huskyFindYellowBall();
-        searchColor = "GELB";
     }
 
     if (ball.found) {
@@ -685,74 +502,6 @@ void runBallApproach() {
     }
 }
 
-void runBallValidate() {
-    lcdPrint("RGB Messung...", "");
-    delay(200);
-
-    enableRgbSensor();
-    delay(100);
-
-    BallColor measurements[3];
-    for (int i = 0; i < 3; i++) {
-        measurements[i] = detectBallColor();
-        delay(50);
-    }
-
-    int yellowCount = 0, blueCount = 0;
-    for (int i = 0; i < 3; i++) {
-        if (measurements[i] == COLOR_YELLOW) yellowCount++;
-        if (measurements[i] == COLOR_BLUE) blueCount++;
-    }
-
-    if (yellowCount >= 2) {
-        validatedBallColor = COLOR_YELLOW;
-    } else if (blueCount >= 2) {
-        validatedBallColor = COLOR_BLUE;
-    } else {
-        validatedBallColor = measurements[0];
-    }
-
-    char l1[17], l2[17];
-    snprintf(l1, 17, "RGB: %s", getColorName(validatedBallColor));
-
-    if (validatedBallColor == currentBallColor) {
-        snprintf(l2, 17, "Bestaetigt!");
-    } else if (validatedBallColor != COLOR_UNKNOWN) {
-        snprintf(l2, 17, "Korrigiert!");
-        currentBallColor = validatedBallColor;
-    } else {
-        snprintf(l2, 17, "HuskyLens nutzen");
-    }
-
-    lcdPrint(l1, l2);
-    delay(1500);
-
-    if (currentBallColor == COLOR_BLUE) {
-        targetBoxID = HUSKY_ID_RED_BOX;
-    } else {
-        targetBoxID = HUSKY_ID_GREEN_BOX;
-    }
-
-    mode = MODE_BALL_PICKUP;
-    modeStartTime = millis();
-}
-
-void runBallPickup() {
-    char l1[17], l2[17];
-    snprintf(l1, 17, "Ball: %s", getColorName(currentBallColor));
-    lcdPrint(l1, "Aufnehmen...");
-
-    // Ball aufheben und auf halber Höhe halten (Tragposition)
-    setServoHalf();
-    delay(200);
-
-    snprintf(l2, 17, "-> %s Box", (targetBoxID == HUSKY_ID_GREEN_BOX) ? "GRUEN" : "ROT");
-    lcdPrint(l1, l2);
-
-    mode = MODE_BOX_SEARCH;
-    modeStartTime = millis();
-}
-
 void runBoxSearch() {
     if (millis() - modeStartTime > BOX_SEARCH_TIMEOUT_MS) {
         lcdPrint("Timeout!", "Keine Box");
@@ -763,14 +512,11 @@ void runBoxSearch() {
     }
 
     HuskyResult box;
-    const char* boxName;
 
     if (targetBoxID == HUSKY_ID_GREEN_BOX) {
         box = huskyFindGreenBox();
-        boxName = "GRUEN";
     } else {
         box = huskyFindRedBox();
-        boxName = "ROT";
     }
 
     if (box.found) {
@@ -905,7 +651,7 @@ void runReturnToField() {
     delay(300);
 
     lcdPrint("Greifer", "runter...");
-    setServoDown();     
+    setServoDown();
     delay(800);
 
     currentBallColor = COLOR_UNKNOWN;

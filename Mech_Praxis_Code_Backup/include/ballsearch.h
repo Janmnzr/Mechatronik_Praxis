@@ -10,13 +10,6 @@
 // =============================================================================
 // BALLSEARCH.H - Ball und Box Handling Modul
 // =============================================================================
-// Enthält:
-// - HuskyLens Kamera
-// - Laser Sensoren (vorne + seitlich)
-// - RGB Sensoren (vorne + seitlich)
-// - Servo Greifer
-// - Ball/Box Such- und Handling-Funktionen
-// =============================================================================
 
 // ===== BALL FARBE ENUM =====
 enum BallColor {
@@ -50,7 +43,6 @@ extern Servo gripper;
 // =============================================================================
 
 bool initHuskyLens();
-bool isHuskyLensReady();
 
 // Ball suchen
 HuskyResult huskyFindBall();
@@ -65,7 +57,6 @@ HuskyResult huskyFindRedBox();
 HuskyResult huskyFindByID(int id);
 
 // Hilfsfunktionen
-bool huskyIsObjectCentered(HuskyResult result);
 int huskyGetCenterOffset(HuskyResult result);
 
 // =============================================================================
@@ -76,8 +67,6 @@ bool initLaser();
 bool initLaser2();
 uint16_t readLaserDistance();
 uint16_t readLaser2Distance();
-bool isLaserReady();
-bool isLaser2Ready();
 
 // =============================================================================
 // TCS34725 RGB SENSOREN
@@ -89,16 +78,9 @@ bool isLaser2Ready();
 #define TCS34725_ATIME      0x01
 #define TCS34725_CONTROL    0x0F
 #define TCS34725_ID         0x12
-#define TCS34725_CDATAL     0x14
 
 bool initRgbSensor();
 bool initRgbSensor2();
-void enableRgbSensor();
-void enableRgbSensor2();
-void readRgbValues(uint16_t* r, uint16_t* g, uint16_t* b, uint16_t* c);
-void readRgb2Values(uint16_t* r, uint16_t* g, uint16_t* b, uint16_t* c);
-BallColor detectBallColor();
-BallColor detectBallColor2();
 const char* getColorName(BallColor color);
 
 // =============================================================================
@@ -106,7 +88,6 @@ const char* getColorName(BallColor color);
 // =============================================================================
 
 void initServo();
-void setServoPosition(int degrees);
 void setServoHalf();
 void setServoUp();
 void setServoDown();
@@ -118,8 +99,6 @@ void setServoDown();
 void startBallSearchMode();
 void runBallSearch();
 void runBallApproach();
-void runBallValidate();
-void runBallPickup();
 void runBoxSearch();
 void runBoxApproach();
 void runBoxPosition();
