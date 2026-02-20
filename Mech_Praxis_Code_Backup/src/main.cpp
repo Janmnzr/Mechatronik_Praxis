@@ -288,8 +288,6 @@ void setup() {
     initServo();
     initLogic();
 
-    lcdPrint("Init Sensoren", "...");
-
     // Laser Sensoren
     bool laserOk = initLaser();
     initLaser2();

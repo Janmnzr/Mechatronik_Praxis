@@ -354,13 +354,11 @@ void startBallSearchMode() {
     currentBallColor = COLOR_UNKNOWN;
     validatedBallColor = COLOR_UNKNOWN;
 
-    lcdPrint("Greifer", "runter...");
     setServoDown();
     delay(800);
 
     enableMotors();
 
-    lcdPrint("Fahre ins", "Ballfeld...");
     executeSteps(SEARCH_ENTRY_DISTANCE * STEPS_PER_CM,
                 SEARCH_ENTRY_DISTANCE * STEPS_PER_CM,
                 SPEED_ENTRY_FIELD);
@@ -401,9 +399,6 @@ void runBallSearch() {
                 currentBallColor = COLOR_UNKNOWN;
             }
 
-            lcdPrint("Ball gefunden", "Anfahren...");
-            delay(300);
-
             mode = MODE_BALL_APPROACH;
             modeStartTime = millis();
         } else {
@@ -417,10 +412,6 @@ void runBallSearch() {
             }
         }
     } else {
-        if (millis() - lastLcdUpdate > 500) {
-            lcdPrint("Suche Ball", NULL);
-            lastLcdUpdate = millis();
-        }
         if (ballsCollected > 0) {
             setMotorSpeeds(SPEED_SEARCH, -SPEED_SEARCH);  // 2. Ball: andere Richtung
         } else {
@@ -524,8 +515,6 @@ void runBoxSearch() {
 
         if (abs(offset) <= HUSKY_TOLERANCE_X) {
             stopMotors();
-            lcdPrint("Box OK", "Anfahren...");
-            delay(300);
             mode = MODE_BOX_APPROACH;
             modeStartTime = millis();
         } else {
@@ -539,10 +528,6 @@ void runBoxSearch() {
             }
         }
     } else {
-        if (millis() - lastLcdUpdate > 500) {
-            lcdPrint("Suche Box", NULL);
-            lastLcdUpdate = millis();
-        }
         setMotorSpeeds(-SPEED_SEARCH, SPEED_SEARCH);
     }
 }
@@ -586,32 +571,16 @@ void runBoxApproach() {
 }
 
 void runBoxPosition() {
-    lcdPrint("Positioniere", "seitlich...");
-
     executeSteps(-STEPS_90_DEGREE, STEPS_90_DEGREE, SPEED_TURN);
     delay(300);
 
-    lcdPrint("Pruefe", "Position...");
-
     uint16_t sideDist = readLaser2Distance();
 
-    char l1[17], l2[17];
-    snprintf(l1, 17, "Seite: %dmm", sideDist);
-
     if (sideDist > 0 && sideDist <= BOX_SIDE_DIST_MM + 50) {
-        snprintf(l2, 17, "Position OK!");
-        lcdPrint(l1, l2);
         delay(1000);
     } else {
-        snprintf(l2, 17, "Korrigiere...");
-        lcdPrint(l1, l2);
-
         executeSteps(-200, 0, SPEED_SIDEWAYS);
         delay(300);
-
-        sideDist = readLaser2Distance();
-        snprintf(l1, 17, "Final: %dmm", sideDist);
-        lcdPrint(l1, "Fertig!");
         delay(1000);
     }
 
@@ -640,17 +609,12 @@ void runBallDrop() {
 }
 
 void runReturnToField() {
-    lcdPrint("Zurueck ins", "Feld...");
-
-    lcdPrint("Drehe links", "...");
     executeSteps(STEPS_90_DEGREE, -STEPS_90_DEGREE, SPEED_TURN);
     delay(300);
 
-    lcdPrint("Rueckwaerts", "ins Feld...");
     executeSteps(-30 * STEPS_PER_CM, -30 * STEPS_PER_CM, SPEED_APPROACH_BOX);
     delay(300);
 
-    lcdPrint("Greifer", "runter...");
     setServoDown();
     delay(800);
 

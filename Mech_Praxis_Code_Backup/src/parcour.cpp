@@ -408,8 +408,6 @@ void executeTurn(int dir, SignalReason reason) {
 // 2 cm zurück; wenn Linie da → fertig. Sonst Suchdrehung (Route-Richtung, dann Gegenrichtung).
 // SELECT bricht nicht mehr ab – Suche läuft bis Linie gefunden oder Durchlauf fertig.
 bool searchLine() {
-    lcdPrint("SUCHE...", "");
-
     executeSteps(-STEPS_BACKWARD, -STEPS_BACKWARD, SPEED_TURN);
     readLinePosition();
     if (isLineDetected()) return true;
