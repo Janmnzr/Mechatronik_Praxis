@@ -53,6 +53,7 @@ extern int targetBoxID;
 // ===== MODE KONSTANTEN =====
 // (als #define statt enum, da das enum in main.cpp definiert ist)
 #define MODE_STOPPED        0
+#define MODE_MANEUVERING    3
 #define MODE_BALL_SEARCH    4
 #define MODE_BALL_APPROACH  5
 #define MODE_BOX_SEARCH     8
@@ -433,7 +434,7 @@ void setServoDown() {
 // WICHTIG: Setzt mode temporaer auf MODE_MANEUVERING damit der Timer1-ISR
 // nicht gleichzeitig mit executeSteps() die Motoren ansteuert (Race Condition).
 
-static void exploreField() {
+static void exploreField(int targetHuskyID) {
     stopMotors();
     delay(300);
 
@@ -443,22 +444,45 @@ static void exploreField() {
 
     lcdPrint("Scanne Feld", "360 Laser...");
 
-    // --- Phase 1: 360°-Laser-Scan ---
-    // Dreht sich in 24 Schritten (je 15°) und misst bei jedem Schritt den Abstand
+    // --- Phase 1: 360°-Laser-Scan mit gleichzeitiger HuskyLens-Suche ---
+    // Dreht sich in 24 Schritten (je 15°) und misst bei jedem Schritt den Abstand.
+    // Wenn die HuskyLens das Zielobjekt waehrend des Scans entdeckt,
+    // wird der Scan abgebrochen und direkt in diese Richtung gefahren.
     uint16_t maxDist = 0;
     int maxDistStep = 0;
+    int foundAtStep = -1;       // -1 = Objekt nicht gefunden waehrend Scan
     int stepsPerIncrement = (STEPS_90_DEGREE * 4) / SCAN_STEPS;
 
     for (int i = 0; i < SCAN_STEPS; i++) {
+        // Laser-Abstand messen
         uint16_t dist = readLaserDistance();
         if (dist > 0 && dist < 2000 && dist > maxDist) {
             maxDist = dist;
             maxDistStep = i;
         }
+
+        // HuskyLens pruefen: Zielobjekt schon sichtbar?
+        if (targetHuskyID > 0) {
+            HuskyResult result = huskyFindByID(targetHuskyID);
+            if (result.found) {
+                // Objekt gefunden! Scan abbrechen
+                foundAtStep = i;
+                lcdPrint("Ziel gefunden!", "Fahre hin...");
+                break;
+            }
+        }
+
         // 15° nach rechts drehen
         executeSteps(stepsPerIncrement, -stepsPerIncrement, SPEED_SEARCH);
         delay(50);
     }
+
+    // --- Objekt waehrend Scan gefunden → Mode wiederherstellen, Suche uebernimmt ---
+    if (foundAtStep >= 0) {
+        mode = savedMode;
+        return;
+    }
+
     // Nach 24 x 15° = 360° sind wir zurueck in der Ausgangsrichtung
 
     // --- Phase 2: Zur Richtung mit groesstem Abstand drehen ---
@@ -536,21 +560,13 @@ void runBallSearch() {
         lastExploreTime = modeStartTime;
     }
 
-    // Timeout-Schutz: nach SEARCH_TIMEOUT_MS abbrechen
-    if (millis() - modeStartTime > SEARCH_TIMEOUT_MS) {
-        lcdPrint("Timeout!", "Kein Ball");
-        delay(2000);
-        setServoUp();
-        lastExploreTime = 0;
-        mode = MODE_STOPPED;
-        return;
-    }
-
     // Nach SPIN_SEARCH_MS (~2 Umdrehungen) ohne Treffer: Feld erkunden
+    // Kein Timeout - Roboter sucht weiter bis er den Ball findet
     if (millis() - lastExploreTime > SPIN_SEARCH_MS) {
         stopMotors();
+        int targetID = (ballsCollected == 0) ? HUSKY_ID_BLUE_BALL : HUSKY_ID_YELLOW_BALL;
         lcdPrint("Erkunde Feld", "Ball...");
-        exploreField();
+        exploreField(targetID);
         lastExploreTime = millis();  // Timer fuer naechste Runde zuruecksetzen
         return;
     }
@@ -718,24 +734,15 @@ void runBoxSearch() {
         lastBoxExploreTime = modeStartTime;
     }
 
-    // Timeout-Schutz: nach BOX_SEARCH_TIMEOUT_MS abbrechen
-    if (millis() - modeStartTime > BOX_SEARCH_TIMEOUT_MS) {
-        lcdPrint("Timeout!", "Keine Box");
-        delay(2000);
-        setServoUp();
-        lastBoxExploreTime = 0;
-        mode = MODE_STOPPED;
-        return;
-    }
-
     // Nach SPIN_SEARCH_MS (~2 Umdrehungen) ohne Treffer: Feld erkunden
+    // Kein Timeout - Roboter sucht weiter bis er die Box findet
     if (millis() - lastBoxExploreTime > SPIN_SEARCH_MS) {
         stopMotors();
         const char* boxName = (targetBoxID == HUSKY_ID_GREEN_BOX) ? "GRUEN" : "ROT";
         char l2[17];
         snprintf(l2, 17, "%s Box...", boxName);
         lcdPrint("Erkunde Feld", l2);
-        exploreField();
+        exploreField(targetBoxID);
         lastBoxExploreTime = millis();  // Timer fuer naechste Runde zuruecksetzen
         return;
     }
