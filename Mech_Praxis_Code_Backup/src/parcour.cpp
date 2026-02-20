@@ -472,7 +472,6 @@ void runLineFollower() {
 
     // === VOLLSIGNAL: ≥6 Sensoren schwarz → Route-basierte Abbiegung ===
     if (totalBlackCount >= 6 && routeStep < ROUTE_LENGTH && millis() - lastTurnTime > TURN_COOLDOWN_MS) {
-        stopMotors();
         mode = 3;
         executeTurn(ROUTE_DIRS[routeStep], ROUTE_TYPES[routeStep]);
         mode = 1;
@@ -494,7 +493,6 @@ void runLineFollower() {
         } else {
             // Abbiegung ausführen
             int dir = (routeStep < ROUTE_LENGTH) ? ROUTE_DIRS[routeStep] : sensorDir;
-            stopMotors();
             mode = 3;
             executeTurn(dir, reason);
             mode = 1;
