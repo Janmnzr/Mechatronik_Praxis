@@ -434,7 +434,7 @@ void setServoDown() {
 // WICHTIG: Setzt mode temporaer auf MODE_MANEUVERING damit der Timer1-ISR
 // nicht gleichzeitig mit executeSteps() die Motoren ansteuert (Race Condition).
 
-static void exploreField(int targetHuskyID) {
+static bool exploreField(int targetHuskyID) {
     stopMotors();
     delay(300);
 
@@ -480,7 +480,7 @@ static void exploreField(int targetHuskyID) {
     // --- Objekt waehrend Scan gefunden → Mode wiederherstellen, Suche uebernimmt ---
     if (foundAtStep >= 0) {
         mode = savedMode;
-        return;
+        return true;    // Aufrufer soll direkt zur Anfahrt wechseln
     }
 
     // Nach 24 x 15° = 360° sind wir zurueck in der Ausgangsrichtung
@@ -491,7 +491,7 @@ static void exploreField(int targetHuskyID) {
         lcdPrint("Kein Platz!", "Drehe weiter");
         delay(500);
         mode = savedMode;
-        return;
+        return false;
     }
 
     if (maxDistStep > 0) {
@@ -515,6 +515,7 @@ static void exploreField(int targetHuskyID) {
 
     // Mode wiederherstellen → ISR uebernimmt wieder
     mode = savedMode;
+    return false;
 }
 
 // =============================================================================
@@ -566,7 +567,15 @@ void runBallSearch() {
         stopMotors();
         int targetID = (ballsCollected == 0) ? HUSKY_ID_BLUE_BALL : HUSKY_ID_YELLOW_BALL;
         lcdPrint("Erkunde Feld", "Ball...");
-        exploreField(targetID);
+        bool foundDuringScan = exploreField(targetID);
+        if (foundDuringScan) {
+            // Ball waehrend 360°-Scan entdeckt → Farbe setzen und direkt anfahren
+            currentBallColor = (targetID == HUSKY_ID_YELLOW_BALL) ? COLOR_YELLOW : COLOR_BLUE;
+            lastExploreTime = 0;
+            mode = MODE_BALL_APPROACH;
+            modeStartTime = millis();
+            return;
+        }
         lastExploreTime = millis();  // Timer fuer naechste Runde zuruecksetzen
         return;
     }
@@ -742,7 +751,14 @@ void runBoxSearch() {
         char l2[17];
         snprintf(l2, 17, "%s Box...", boxName);
         lcdPrint("Erkunde Feld", l2);
-        exploreField(targetBoxID);
+        bool foundDuringScan = exploreField(targetBoxID);
+        if (foundDuringScan) {
+            // Box waehrend 360°-Scan entdeckt → direkt anfahren
+            lastBoxExploreTime = 0;
+            mode = MODE_BOX_APPROACH;
+            modeStartTime = millis();
+            return;
+        }
         lastBoxExploreTime = millis();  // Timer fuer naechste Runde zuruecksetzen
         return;
     }
